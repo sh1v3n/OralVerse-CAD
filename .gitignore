@@ -1,0 +1,52 @@
+# Datasets (large image folders — keep out of git)
+data/
+archive/
+archive2/
+
+# Local backend dev artifacts
+storage/
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ML artifacts
+runs/
+*.pt
+*.onnx
+*.pth
+wandb/
+lightning_logs/
+mlruns/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+build/
+.turbo/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Claude Code local state
+.claude/
