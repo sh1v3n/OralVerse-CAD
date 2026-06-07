@@ -3,10 +3,23 @@ import { useRef, useState } from "react";
 import { getScan, startAnalyze, uploadImage } from "@/lib/api";
 import { useScanStore } from "@/lib/store";
 
+function friendlyError(raw: string): string {
+  if (raw === "models_unavailable") {
+    return "The AI models aren't installed on the backend yet — ask the admin to run the training step.";
+  }
+  if (raw.startsWith("error:")) {
+    return "Something went wrong while analyzing the scan. Try uploading again.";
+  }
+  if (raw === "timeout waiting for analysis") {
+    return "Analysis is taking longer than expected. Try again in a moment.";
+  }
+  return raw;
+}
+
 export function UploadDropzone() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
-  const { setScan, setStatus, status } = useScanStore();
+  const { setScan, setStatus, status, error } = useScanStore();
 
   async function handleFile(file: File) {
     try {
@@ -69,7 +82,7 @@ export function UploadDropzone() {
         {status === "ready" && "Scan ready. Click any tooth on the right."}
         {status === "error" && (
           <span className="text-severity-red">
-            {useScanStore.getState().error ?? "error"}
+            {friendlyError(error ?? "error")}
           </span>
         )}
       </p>

@@ -1,8 +1,6 @@
 "use client";
-import { useRef } from "react";
 import { ThreeEvent } from "@react-three/fiber";
-import { Mesh } from "three";
-import type { ToothLayout, Severity } from "@/lib/teeth";
+import type { Severity, ToothLayout } from "@/lib/teeth";
 import { SEVERITY_COLOR } from "@/lib/teeth";
 
 interface Props {
@@ -13,7 +11,6 @@ interface Props {
 }
 
 export function Tooth({ layout, severity, selected, onSelect }: Props) {
-  const ref = useRef<Mesh>(null);
   const color = SEVERITY_COLOR[severity];
 
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
@@ -24,7 +21,6 @@ export function Tooth({ layout, severity, selected, onSelect }: Props) {
   return (
     <group position={layout.position} rotation={[0, layout.rotationY, 0]}>
       <mesh
-        ref={ref}
         scale={layout.scale}
         onClick={handleClick}
         onPointerOver={(e) => {

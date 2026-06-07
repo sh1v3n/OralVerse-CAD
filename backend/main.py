@@ -1,8 +1,15 @@
+from pathlib import Path
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.models import Base, engine
-from app.routes import report, scan, timeline
+# Load .env from project root (one level up from backend/) so the LLM keys
+# used by ai/llm/report_parser.py are available without per-shell exports.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+from app.models import Base, engine  # noqa: E402
+from app.routes import report, scan, timeline  # noqa: E402
 
 Base.metadata.create_all(bind=engine)
 

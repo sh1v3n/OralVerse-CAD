@@ -30,7 +30,7 @@ export function ReportUpload() {
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf,image/*"
+        accept="application/pdf,image/*,text/plain"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];

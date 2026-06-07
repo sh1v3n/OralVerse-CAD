@@ -1,10 +1,13 @@
-"""Use Claude opus-4-7 to extract tooth-numbered findings from OCR'd report text.
+"""Extract tooth-numbered findings from OCR'd report text.
 
-Returns a list of {fdi, label, confidence, note} dicts merged into the findings
-table with source="report".
+Supports two providers, both with generous free tiers:
 
-The system prompt is marked for prompt caching — same system instruction across
-every report parse, so we get an automatic cache hit after the first call.
+  - Groq        (env: GROQ_API_KEY)            — preferred when set
+  - Gemini      (env: GEMINI_API_KEY or GOOGLE_API_KEY)
+
+The function picks whichever key is configured. Returns a list of
+{fdi, label, confidence, note} dicts merged into the findings table with
+source="report".
 """
 from __future__ import annotations
 
@@ -12,7 +15,7 @@ import json
 import os
 from typing import TypedDict
 
-import anthropic
+import httpx
 
 
 class ReportFinding(TypedDict, total=False):
@@ -41,26 +44,107 @@ Rules:
   No markdown, no commentary, just the JSON array.
 """
 
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "llama-3.3-70b-versatile"
+
+GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/models/"
+    f"{GEMINI_MODEL}:generateContent"
+)
+
+REQUEST_TIMEOUT = 30.0
+
+
+def _call_groq(api_key: str, ocr_text: str) -> str:
+    resp = httpx.post(
+        GROQ_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": GROQ_MODEL,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": ocr_text[:12000]},
+            ],
+            "temperature": 0.0,
+            "response_format": {"type": "json_object"},
+        },
+        timeout=REQUEST_TIMEOUT,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"]
+
+
+def _call_gemini(api_key: str, ocr_text: str) -> str:
+    resp = httpx.post(
+        GEMINI_URL,
+        params={"key": api_key},
+        headers={"Content-Type": "application/json"},
+        json={
+            "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+            "contents": [
+                {"role": "user", "parts": [{"text": ocr_text[:12000]}]},
+            ],
+            "generationConfig": {
+                "temperature": 0.0,
+                "responseMimeType": "application/json",
+            },
+        },
+        timeout=REQUEST_TIMEOUT,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data["candidates"][0]["content"]["parts"][0]["text"]
+
+
+def _llm_extract(ocr_text: str) -> str:
+    groq_key = os.environ.get("GROQ_API_KEY")
+    gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if groq_key:
+        return _call_groq(groq_key, ocr_text)
+    if gemini_key:
+        return _call_gemini(gemini_key, ocr_text)
+    raise RuntimeError(
+        "No LLM provider configured — set GROQ_API_KEY or GEMINI_API_KEY"
+    )
+
+
+def _coerce_findings(parsed: object) -> list[ReportFinding]:
+    # Groq's json_object mode wraps the array in an object; Gemini may return
+    # the bare array. Accept either shape.
+    if isinstance(parsed, dict):
+        for value in parsed.values():
+            if isinstance(value, list):
+                parsed = value
+                break
+        else:
+            return []
+    if not isinstance(parsed, list):
+        return []
+    out: list[ReportFinding] = []
+    for item in parsed:
+        if not isinstance(item, dict) or "fdi" not in item or "label" not in item:
+            continue
+        try:
+            out.append(
+                ReportFinding(
+                    fdi=int(item["fdi"]),
+                    label=str(item["label"]).lower(),
+                    confidence=float(item.get("confidence", 0.7)),
+                    note=str(item.get("note", "")),
+                )
+            )
+        except (TypeError, ValueError):
+            continue
+    return out
+
 
 def parse_report(ocr_text: str) -> list[ReportFinding]:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY is not set")
-
-    client = anthropic.Anthropic(api_key=api_key)
-    resp = client.messages.create(
-        model="claude-opus-4-7",
-        max_tokens=2048,
-        system=[
-            {
-                "type": "text",
-                "text": SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[{"role": "user", "content": ocr_text[:12000]}],
-    )
-    raw = "".join(block.text for block in resp.content if block.type == "text").strip()
+    raw = _llm_extract(ocr_text).strip()
     if raw.startswith("```"):
         raw = raw.strip("`")
         if raw.lower().startswith("json"):
@@ -69,18 +153,4 @@ def parse_report(ocr_text: str) -> list[ReportFinding]:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
         return []
-    if not isinstance(parsed, list):
-        return []
-    out: list[ReportFinding] = []
-    for item in parsed:
-        if not isinstance(item, dict) or "fdi" not in item or "label" not in item:
-            continue
-        out.append(
-            ReportFinding(
-                fdi=int(item["fdi"]),
-                label=str(item["label"]).lower(),
-                confidence=float(item.get("confidence", 0.7)),
-                note=str(item.get("note", "")),
-            )
-        )
-    return out
+    return _coerce_findings(parsed)
