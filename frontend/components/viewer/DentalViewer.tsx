@@ -1,9 +1,11 @@
 "use client";
+import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
-import { Grid, OrbitControls } from "@react-three/drei";
+import { Html } from "@react-three/drei";
 import { Tooth } from "./Tooth";
 import { TOOTH_LAYOUT, type Severity } from "@/lib/teeth";
 import { useScanStore } from "@/lib/store";
+import { DentalLighting, Gingiva, ViewerEnvironment } from "./DentalScene";
 
 export function DentalViewer() {
   const { scan, selectedFdi, selectTooth, status } = useScanStore();
@@ -20,37 +22,47 @@ export function DentalViewer() {
 
   return (
     <div className="w-full h-full bg-bg rounded-2xl overflow-hidden relative">
-      <Canvas shadows camera={{ position: [0, 3.5, 6], fov: 45 }}>
-        <ambientLight intensity={0.55} />
-        <directionalLight position={[5, 8, 5]} intensity={1.2} castShadow />
-        <directionalLight position={[-4, 4, -3]} intensity={0.5} />
-        <hemisphereLight args={["#ffffff", "#1f2937", 0.35]} />
-
-        {TOOTH_LAYOUT.map((layout) => {
-          const severity: Severity = severityByFdi.get(layout.fdi) ?? "green";
-          return (
-            <Tooth
-              key={layout.fdi}
-              layout={layout}
-              severity={severity}
-              selected={selectedFdi === layout.fdi}
-              onSelect={selectTooth}
-            />
-          );
-        })}
-
-        <Grid
-          args={[20, 20]}
-          position={[0, -1.4, 0]}
-          cellColor="#1f2937"
-          sectionColor="#374151"
-          fadeDistance={18}
-        />
-        <OrbitControls makeDefault enableDamping minDistance={3} maxDistance={14} />
+      <Canvas
+        shadows
+        dpr={[1, 1.75]}
+        camera={{ position: [0, 4.5, 7.8], fov: 38 }}
+        gl={{ antialias: true, toneMapping: 4, toneMappingExposure: 1.08 }}
+      >
+        <color attach="background" args={["#080d14"]} />
+        <fog attach="fog" args={["#080d14", 9, 17]} />
+        <DentalLighting />
+        <Suspense fallback={<ModelLoading />}>
+          <group rotation={[-0.08, 0, 0]}>
+            <Gingiva />
+            {TOOTH_LAYOUT.map((layout) => {
+              const severity: Severity = severityByFdi.get(layout.fdi) ?? "green";
+              return (
+                <Tooth
+                  key={layout.fdi}
+                  layout={layout}
+                  severity={severity}
+                  selected={selectedFdi === layout.fdi}
+                  onSelect={selectTooth}
+                />
+              );
+            })}
+          </group>
+        </Suspense>
+        <ViewerEnvironment />
       </Canvas>
 
       <ViewerBanner status={status} scanReady={scanReady} allHealthy={allHealthy} />
     </div>
+  );
+}
+
+function ModelLoading() {
+  return (
+    <Html center>
+      <div className="whitespace-nowrap rounded-full border border-white/10 bg-[#0d1520]/95 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200 shadow-2xl">
+        Loading anatomical dentition
+      </div>
+    </Html>
   );
 }
 

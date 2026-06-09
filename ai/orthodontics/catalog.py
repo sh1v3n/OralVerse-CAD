@@ -41,10 +41,10 @@ def ideal_pose(fdi: int) -> dict:
     upper = quadrant in (1, 2)
     t = (position - 0.5) / 8
     angle = (pi / 2) * t
-    x = side * 2.8 * sin(angle)
-    z = -(2.6 * (1 - cos(angle))) + 0.5
-    y = 0.4 if upper else -0.4
-    rotation = (x / 2.8) * 24
+    x = side * 3.15 * sin(angle)
+    z = -(3.0 * (1 - cos(angle))) + 0.72
+    y = 0.66 if upper else -0.66
+    rotation = (x / 3.15) * 25
     return {
         "fdi": fdi,
         "position": [round(x, 4), y, round(z, 4)],

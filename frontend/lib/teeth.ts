@@ -1,4 +1,4 @@
-// FDI numbering and procedural arch geometry.
+// FDI numbering and anatomical arch geometry.
 //
 // FDI quadrants:
 //   Q1 11-18  upper-right (patient's right)
@@ -46,27 +46,13 @@ export interface ToothLayout {
   fdi: number;
   position: [number, number, number];
   rotationY: number;
-  scale: [number, number, number];
 }
 
-// Per-position scale (incisors slimmer, molars wider). Index 0 = position 1.
-const POSITION_SCALE: [number, number, number][] = [
-  [0.34, 0.95, 0.42], // 1 central incisor
-  [0.32, 0.90, 0.40], // 2 lateral incisor
-  [0.36, 1.05, 0.46], // 3 canine
-  [0.42, 0.85, 0.55], // 4 first premolar
-  [0.44, 0.85, 0.58], // 5 second premolar
-  [0.56, 0.80, 0.66], // 6 first molar
-  [0.58, 0.80, 0.68], // 7 second molar
-  [0.54, 0.74, 0.62], // 8 third molar
-];
-
-// Arch parameters. Small Y gap between upper and lower for visual stacking.
-const ARCH_WIDTH = 2.8;
-const ARCH_DEPTH = 2.6;
-const ARCH_DEPTH_OFFSET = 0.5;
-export const UPPER_Y = 0.4;
-export const LOWER_Y = -0.4;
+const ARCH_WIDTH = 3.15;
+const ARCH_DEPTH = 3;
+const ARCH_DEPTH_OFFSET = 0.72;
+export const UPPER_Y = 0.66;
+export const LOWER_Y = -0.66;
 
 function archPoint(t: number, side: 1 | -1): [number, number] {
   // Parametric horseshoe: t=0 midline (incisor), t=1 last molar (third molar).
@@ -87,14 +73,17 @@ function layoutQuadrant(quadrant: 1 | 2 | 3 | 4): ToothLayout[] {
     const position = i + 1;
     const t = (position - 0.5) / 8;
     const [x, z] = archPoint(t, side);
-    const rotationY = Math.atan2(x, z) + (side === 1 ? Math.PI : 0);
+    const rotationY = THREE.MathUtils.degToRad((x / ARCH_WIDTH) * 25);
     return {
       fdi: base + position,
       position: [x, y, -z + ARCH_DEPTH_OFFSET] as [number, number, number],
       rotationY,
-      scale: POSITION_SCALE[i],
     };
   });
+}
+
+export function idealRotation(fdi: number): number {
+  return TOOTH_LAYOUT.find((tooth) => tooth.fdi === fdi)?.rotationY ?? 0;
 }
 
 export const TOOTH_LAYOUT: ToothLayout[] = [
