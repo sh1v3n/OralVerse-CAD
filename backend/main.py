@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from app.models import Base, engine  # noqa: E402
-from app.routes import report, scan, timeline  # noqa: E402
+from app.routes import orthodontics, report, scan, timeline  # noqa: E402
 
 Base.metadata.create_all(bind=engine)
 
@@ -23,6 +23,7 @@ app.add_middleware(
 app.include_router(scan.router)
 app.include_router(report.router)
 app.include_router(timeline.router)
+app.include_router(orthodontics.router)
 
 
 @app.get("/health")

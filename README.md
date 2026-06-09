@@ -5,6 +5,11 @@ end-to-end detect → segment → classify pipeline, view your teeth as an
 interactive 3D model color-coded by severity, attach reports for OCR+LLM
 fusion, and track oral health over time.
 
+The repository also includes an **orthodontic copilot layer** over a
+reconstructed tooth-pose model: malocclusion analysis, constraint-aware target
+generation, aligner staging, animated tooth movement, attachments/IPR,
+prediction, grounded copilot queries, and draft clinical reports.
+
 ## What's in the box
 
 - **AI pipeline** — YOLOv8 (tooth + condition detection) → SAM 2
@@ -128,6 +133,22 @@ your environment to enable Claude-based extraction.
 | `POST` | `/api/scan/{id}/report` | Upload a dental report (PDF/image) |
 | `GET`  | `/api/scans` | All scans (most recent first) |
 | `GET`  | `/api/timeline/{a}/vs/{b}` | Per-FDI delta between two scans |
+| `GET`  | `/api/orthodontics/demo-plan` | Complete runnable orthodontic demo plan |
+| `POST` | `/api/orthodontics/plan` | Plan from reconstructed per-tooth poses |
+| `POST` | `/api/orthodontics/copilot` | Plan-grounded clinical copilot query |
+
+### Orthodontic model contract
+
+`POST /api/orthodontics/plan` accepts FDI tooth poses (`position`,
+`rotation_deg`, `confidence`) plus overjet, overbite, and midline metrics.
+`ai/orthodontics/ml_adapters.py` defines the boundary for PointNet++ or
+MeshSegNet segmentation, landmark prediction, and optional PyTorch tooth-graph
+refinement. The runnable planner uses explicit movement limits and collision
+checks; trained model checkpoints are not bundled.
+
+Set `LOCAL_LLM_URL` to an OpenAI-compatible local server to use an LLM for
+copilot phrasing. Without it, a deterministic plan-grounded copilot handles
+stage, movement, attachment, IPR, duration, and refinement questions.
 
 ## Design notes / honest limitations
 
@@ -138,6 +159,10 @@ your environment to enable Claude-based extraction.
   OPG detections to FDI numbers uses a quadrant + arch-ordering heuristic.
 - **Alignment / gum health.** Not derivable from this dataset. The UI shows
   them as "not assessed (OPG)" rather than fabricating values.
+- **Orthodontic planning.** The included case is a synthetic demonstration
+  until the reconstruction pipeline supplies patient tooth poses. Outputs are
+  decision support and require root/bone, periodontal, functional occlusion,
+  and clinician validation before fabrication.
 - **Class names.** The shipped YOLO labels had no manifest. `data.yaml`'s
   class names are best-guesses from box-frequency; `ai/detect/verify_labels.py`
   exists specifically to sanity-check this before training.

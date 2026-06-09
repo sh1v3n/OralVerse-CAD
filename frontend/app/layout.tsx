@@ -2,8 +2,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "OralVerse",
-  description: "AI-powered dental digital twin",
+  title: "OralVerse Ortho Copilot",
+  description: "AI-assisted orthodontic treatment planning and aligner simulation",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

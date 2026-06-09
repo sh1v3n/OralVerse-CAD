@@ -9,14 +9,15 @@ export function ReportUpload() {
   const [status, setStatus] = useState<string>("");
 
   if (!scan) return null;
+  const scanId = scan.id;
 
   async function handleFile(f: File) {
     try {
       setStatus("Parsing report…");
-      const r = await uploadReport(scan.id, f);
+      const r = await uploadReport(scanId, f);
       setStatus(`Added ${r.findings_added} report-derived findings`);
       const refreshed = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/scan/${scan.id}`,
+        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/scan/${scanId}`,
       ).then((r) => r.json());
       setScan(refreshed);
     } catch (e) {
