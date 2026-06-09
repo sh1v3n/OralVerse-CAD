@@ -3,6 +3,12 @@ import { useRef, useState } from "react";
 import { getScan, startAnalyze, uploadImage } from "@/lib/api";
 import { useScanStore } from "@/lib/store";
 
+// Cold-start of the YOLO + EfficientNet + SAM 2 stack on CPU can take a few
+// minutes for a full panoramic OPG. Poll for up to ANALYZE_TIMEOUT_MS before
+// giving up.
+const ANALYZE_TIMEOUT_MS = 5 * 60 * 1000;
+const ANALYZE_POLL_MS = 2000;
+
 function friendlyError(raw: string): string {
   if (raw === "models_unavailable") {
     return "The AI models aren't installed on the backend yet — ask the admin to run the training step.";
@@ -11,25 +17,36 @@ function friendlyError(raw: string): string {
     return "Something went wrong while analyzing the scan. Try uploading again.";
   }
   if (raw === "timeout waiting for analysis") {
-    return "Analysis is taking longer than expected. Try again in a moment.";
+    return "Analysis is still running on the backend but is taking longer than expected. Check the backend logs, or refresh the page in a minute to see the result.";
   }
   return raw;
+}
+
+function formatElapsed(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}m ${r}s`;
 }
 
 export function UploadDropzone() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const { setScan, setStatus, status, error } = useScanStore();
 
   async function handleFile(file: File) {
     try {
       setStatus("uploading");
+      setElapsedMs(0);
       const { image_id } = await uploadImage(file);
       setStatus("analyzing");
       await startAnalyze(image_id);
-      // poll until analyzed or failed
-      for (let i = 0; i < 30; i++) {
-        await new Promise((r) => setTimeout(r, 1000));
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < ANALYZE_TIMEOUT_MS) {
+        await new Promise((r) => setTimeout(r, ANALYZE_POLL_MS));
+        setElapsedMs(Date.now() - startedAt);
         const scan = await getScan(image_id);
         if (scan.status === "analyzed") {
           setScan(scan);
@@ -45,6 +62,17 @@ export function UploadDropzone() {
     } catch (e) {
       setStatus("error", (e as Error).message);
     }
+  }
+
+  function analyzingMessage(): string {
+    const elapsed = formatElapsed(elapsedMs);
+    if (elapsedMs < 30_000) {
+      return `Analyzing — detect → segment → classify (${elapsed})`;
+    }
+    if (elapsedMs < 90_000) {
+      return `Still analyzing — first run loads the AI models, this can take a minute or two (${elapsed})`;
+    }
+    return `Still analyzing — cold-start inference on CPU is slow but it's still working (${elapsed})`;
   }
 
   return (
@@ -78,7 +106,7 @@ export function UploadDropzone() {
       <p className="text-sm text-gray-300">
         {status === "idle" && "Drop a panoramic OPG X-ray here, or click to upload"}
         {status === "uploading" && "Uploading…"}
-        {status === "analyzing" && "Analyzing — detect → segment → classify"}
+        {status === "analyzing" && analyzingMessage()}
         {status === "ready" && "Scan ready. Click any tooth on the right."}
         {status === "error" && (
           <span className="text-severity-red">
