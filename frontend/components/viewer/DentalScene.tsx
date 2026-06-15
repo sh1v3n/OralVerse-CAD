@@ -1,71 +1,82 @@
 "use client";
 
+import { useMemo } from "react";
 import { Grid, OrbitControls } from "@react-three/drei";
+import * as THREE from "three";
 import { makeArchCurve, LOWER_Y, UPPER_Y } from "@/lib/teeth";
 
 export function DentalLighting() {
   return (
     <>
-      <ambientLight intensity={0.32} />
-      <hemisphereLight args={["#dff7ff", "#25181b", 0.72]} />
+      <ambientLight intensity={0.4} />
+      <hemisphereLight args={["#ffffff", "#e0e5ec", 0.6]} />
+      {/* Key light */}
       <directionalLight
-        position={[4.5, 7, 5]}
-        intensity={2.8}
-        color="#fff8ec"
+        position={[4, 6, 4]}
+        intensity={2.0}
+        color="#ffffff"
         castShadow
         shadow-mapSize={[2048, 2048]}
-        shadow-bias={-0.0004}
+        shadow-bias={-0.0005}
+        shadow-normalBias={0.02}
       />
-      <directionalLight position={[-5, 3, 1]} intensity={1.25} color="#9adfff" />
-      <pointLight position={[0, 1, -5]} intensity={18} distance={12} color="#c7b8ff" />
+      {/* Fill light */}
+      <directionalLight position={[-4, 4, -4]} intensity={1.2} color="#e6f2ff" />
+      {/* Back rim light */}
+      <pointLight position={[0, -1, -6]} intensity={15} distance={20} color="#f0f5ff" />
     </>
   );
 }
 
-export function Gingiva({ opacity = 0.9 }: { opacity?: number }) {
+export function Gingiva({ opacity = 1 }: { opacity?: number }) {
   return (
     <group>
-      <GumArch y={UPPER_Y + 0.28} />
-      <GumArch y={LOWER_Y - 0.28} />
-      <mesh position={[0, UPPER_Y + 0.63, -0.5]} scale={[3.1, 0.13, 2.45]}>
-        <sphereGeometry args={[1, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2]} />
+      <GumArch y={UPPER_Y + 0.35} isUpper={true} />
+      <GumArch y={LOWER_Y - 0.35} isUpper={false} />
+      
+      {/* Upper Palate */}
+      <mesh position={[0, UPPER_Y + 0.6, -1.5]} scale={[2.8, 0.4, 3.5]}>
+        <sphereGeometry args={[1, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2]} />
         <meshPhysicalMaterial
-          color="#8f394f"
-          roughness={0.52}
-          clearcoat={0.16}
+          color="#d97c8e"
+          roughness={0.4}
+          clearcoat={0.3}
+          side={THREE.DoubleSide}
           transparent
-          opacity={opacity * 0.34}
-          side={2}
+          opacity={opacity}
         />
       </mesh>
+      
+      {/* Lower Jaw Floor */}
       <mesh
-        position={[0, LOWER_Y - 0.63, -0.5]}
+        position={[0, LOWER_Y - 0.6, -1.5]}
         rotation={[Math.PI, 0, 0]}
-        scale={[3.1, 0.13, 2.45]}
+        scale={[2.8, 0.4, 3.5]}
       >
-        <sphereGeometry args={[1, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <sphereGeometry args={[1, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2]} />
         <meshPhysicalMaterial
-          color="#8f394f"
-          roughness={0.52}
-          clearcoat={0.16}
+          color="#d97c8e"
+          roughness={0.4}
+          clearcoat={0.3}
+          side={THREE.DoubleSide}
           transparent
-          opacity={opacity * 0.34}
-          side={2}
+          opacity={opacity}
         />
       </mesh>
     </group>
   );
 }
 
-function GumArch({ y }: { y: number }) {
+function GumArch({ y, isUpper }: { y: number; isUpper: boolean }) {
+  const curve = useMemo(() => makeArchCurve(y, isUpper), [y, isUpper]);
   return (
     <mesh castShadow receiveShadow>
-      <tubeGeometry args={[makeArchCurve(y), 96, 0.29, 16, false]} />
+      <tubeGeometry args={[curve, 128, 0.45, 32, false]} />
       <meshPhysicalMaterial
-        color="#a84b61"
-        roughness={0.46}
-        clearcoat={0.22}
-        clearcoatRoughness={0.38}
+        color="#d97c8e"
+        roughness={0.4}
+        clearcoat={0.3}
+        clearcoatRoughness={0.2}
       />
     </mesh>
   );
@@ -77,8 +88,8 @@ export function ViewerEnvironment() {
       <Grid
         args={[18, 18]}
         position={[0, -1.68, 0]}
-        cellColor="#142130"
-        sectionColor="#294057"
+        cellColor="#cbd5e1"
+        sectionColor="#94a3b8"
         fadeDistance={13}
         fadeStrength={1.4}
       />
@@ -100,21 +111,25 @@ export function AlignerOverlay({ visible }: { visible: boolean }) {
   if (!visible) return null;
   return (
     <group>
-      {[UPPER_Y - 0.12, LOWER_Y + 0.12].map((y) => (
-        <mesh key={y} renderOrder={2}>
-          <tubeGeometry args={[makeArchCurve(y), 96, 0.36, 14, false]} />
-          <meshPhysicalMaterial
-            color="#d9fbff"
-            roughness={0.08}
-            metalness={0}
-            transmission={0.82}
-            thickness={0.08}
-            transparent
-            opacity={0.14}
-            depthWrite={false}
-          />
-        </mesh>
-      ))}
+      {[UPPER_Y - 0.12, LOWER_Y + 0.12].map((y, index) => {
+        const isUpper = index === 0;
+        const curve = makeArchCurve(y, isUpper);
+        return (
+          <mesh key={y} renderOrder={2}>
+            <tubeGeometry args={[curve, 128, 0.36, 16, false]} />
+            <meshPhysicalMaterial
+              color="#d9fbff"
+              roughness={0.08}
+              metalness={0}
+              transmission={0.82}
+              thickness={0.08}
+              transparent
+              opacity={0.14}
+              depthWrite={false}
+            />
+          </mesh>
+        );
+      })}
     </group>
   );
 }

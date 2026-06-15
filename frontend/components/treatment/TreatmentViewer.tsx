@@ -1,238 +1,127 @@
 "use client";
 
-import { Suspense, useMemo, useRef } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+/**
+ * TreatmentViewer (STL-first)
+ *
+ * Renders the 3D canvas when STL scans are loaded.
+ * When no scans are loaded, shows a clean "Load a scan to begin" empty state.
+ * All placeholder anatomical tooth geometry has been removed.
+ */
+
+import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import { useTreatmentStore } from "@/lib/store";
-import { idealRotation, TOOTH_LAYOUT, toothKind } from "@/lib/teeth";
-import { attachmentSize } from "@/lib/toothAssets";
-import type { ToothMovementDto, ToothPoseDto } from "@/lib/api";
-import { AnatomicalTooth } from "@/components/viewer/AnatomicalTooth";
-import {
-  AlignerOverlay,
-  DentalLighting,
-  Gingiva,
-  ViewerEnvironment,
-} from "@/components/viewer/DentalScene";
+import { useSTLScanStore } from "@/lib/scanStore";
+import type { CameraView } from "@/lib/store";
+import { STLDentalScene } from "@/components/viewer/STLDentalScene";
+import { STLViewerControls } from "@/components/viewer/STLViewerControls";
 
-const ENAMEL = "#e8e5dc";
-const ACTIVE = "#67e8f9";
-const SELECTED = "#fbbf24";
-const HIGHLIGHTED = "#c084fc";
+// ─── Empty state ───────────────────────────────────────────────────────────────
+
+function ScanNotLoadedOverlay() {
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-[#f0eeeb]">
+      <div className="text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/70 shadow-sm border border-stone-200">
+          <svg className="h-7 w-7 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <p className="text-sm font-semibold text-stone-600">No scan loaded</p>
+        <p className="text-xs text-stone-400 mt-1">Select a dataset case from the sidebar</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Camera controller ─────────────────────────────────────────────────────────
+
+const CAMERA_POSITIONS: Record<CameraView, [number, number, number]> = {
+  both:       [0,  5.0,  9.0],
+  labial:     [0,  1.5,  10.0],
+  lingual:    [0,  1.5, -10.0],
+  maxillary:  [0, 12.0,  0.5],
+  mandibular: [0,-12.0,  0.5],
+  right:      [-10, 2.0, 2.0],
+  left:       [ 10, 2.0, 2.0],
+  overjet:    [0,  4.5,  8.0],
+};
+
+function CameraController({ view }: { view: CameraView }) {
+  const { camera } = useThree();
+  const targetVec = useMemo(() => new THREE.Vector3(...CAMERA_POSITIONS[view]), [view]);
+
+  useFrame(() => {
+    camera.position.lerp(targetVec, 0.06);
+    camera.lookAt(0, 0, 0);
+  });
+
+  return null;
+}
+
+// ─── Loading fallback ──────────────────────────────────────────────────────────
+
+function SceneLoading() {
+  return (
+    <Html center>
+      <div className="flex items-center gap-2 rounded-full border border-stone-200 bg-white/95 px-4 py-2 text-[11px] font-medium text-stone-600 shadow-md whitespace-nowrap">
+        <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+        Loading scan…
+      </div>
+    </Html>
+  );
+}
+
+// ─── Main Viewer ───────────────────────────────────────────────────────────────
 
 export function TreatmentViewer() {
-  const {
-    plan,
-    stage,
-    compareMode,
-    selectedFdi,
-    highlightedTeeth,
-    selectTooth,
-  } = useTreatmentStore();
+  const { cameraView } = useTreatmentStore();
+  const stlUpper = useSTLScanStore((s) => s.upperArch);
+  const stlLower = useSTLScanStore((s) => s.lowerArch);
+  const loadingStatus = useSTLScanStore((s) => s.loadingStatus);
+  const hasSTL = stlUpper !== null || stlLower !== null;
+  const isLoading = loadingStatus === "loading" || loadingStatus === "fetching_manifest";
 
-  const activeTeeth = useMemo(
-    () => new Set(plan?.stages[stage - 1]?.movements.map((m) => m.fdi) ?? []),
-    [plan, stage],
-  );
-  const movementMap = useMemo(
-    () => new Map(plan?.movements.map((movement) => [movement.fdi, movement]) ?? []),
-    [plan],
-  );
-  const poseMap = useMemo(
-    () => new Map(plan?.model.teeth.map((tooth) => [tooth.fdi, tooth]) ?? []),
-    [plan],
-  );
-  const activeStageCount = useMemo(
-    () => plan?.stages.filter((item) => item.kind === "active").length ?? 1,
-    [plan],
-  );
-
-  if (!plan) {
-    return <ViewerLoading />;
+  // If no scans and not loading, show empty state
+  if (!hasSTL && !isLoading) {
+    return <ScanNotLoadedOverlay />;
   }
 
   return (
-    <div className="relative h-full min-h-[520px] overflow-hidden rounded-[28px] border border-white/10 bg-[#080d14]">
+    <div className="relative h-full min-h-[520px] overflow-hidden bg-[#f0eeeb]">
+      {/* Loading overlay — covers the canvas while STL is parsing */}
+      {isLoading && !hasSTL && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#f0eeeb]">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-8 w-8 rounded-full border-2 border-stone-300 border-t-stone-700 animate-spin" />
+            <p className="text-xs text-stone-500 font-medium">Parsing STL scan…</p>
+          </div>
+        </div>
+      )}
+
       <Canvas
         shadows
-        dpr={[1, 1.75]}
-        camera={{ position: [0, 4.4, 7.7], fov: 38 }}
-        gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.08 }}
+        dpr={[1, 1.5]}
+        camera={{ position: [0, 12, 0.5], fov: 35, near: 0.1, far: 100 }}
+        gl={{
+          antialias: true,
+          toneMapping: THREE.LinearToneMapping,
+          toneMappingExposure: 1.0,
+        }}
       >
-        <color attach="background" args={["#080d14"]} />
-        <fog attach="fog" args={["#080d14", 9, 17]} />
-        <DentalLighting />
-        <Suspense fallback={<ModelLoading />}>
-          <group rotation={[-0.08, 0, 0]}>
-            <Gingiva opacity={0.82} />
-            <AlignerOverlay visible={compareMode === "planned" && stage > 0} />
-            {TOOTH_LAYOUT.map((layout) => {
-              const base = poseMap.get(layout.fdi);
-              const movement = movementMap.get(layout.fdi);
-              return (
-                <AnimatedTreatmentTooth
-                  key={layout.fdi}
-                  fdi={layout.fdi}
-                  fallbackPosition={layout.position}
-                  base={base}
-                  movement={movement}
-                  progress={getProgress(activeStageCount, stage, compareMode)}
-                  active={activeTeeth.has(layout.fdi)}
-                  selected={selectedFdi === layout.fdi}
-                  highlighted={highlightedTeeth.includes(layout.fdi)}
-                  onSelect={selectTooth}
-                />
-              );
-            })}
-          </group>
+        <color attach="background" args={["#f0eeeb"]} />
+
+        <Suspense fallback={<SceneLoading />}>
+          <CameraController view={cameraView} />
+          <STLDentalScene />
         </Suspense>
-        <ViewerEnvironment />
       </Canvas>
 
-      <div className="pointer-events-none absolute left-5 top-5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">
-          Movement simulation
-        </p>
-        <p className="mt-1 text-sm text-white">
-          {compareMode === "before"
-            ? "Initial dentition"
-            : compareMode === "after"
-              ? "Predicted outcome"
-              : stage === 0
-                ? "Initial dentition"
-                : `Aligner ${stage} of ${plan.stages.length}`}
-        </p>
-      </div>
-
-      <div className="pointer-events-none absolute bottom-5 left-5 flex gap-4 text-[10px] uppercase tracking-wider text-slate-400">
-        <LegendDot color={ACTIVE} label="Active" />
-        <LegendDot color={SELECTED} label="Selected" />
-        <LegendDot color={HIGHLIGHTED} label="Copilot" />
-      </div>
+      {/* Viewer overlay controls */}
+      <STLViewerControls />
     </div>
-  );
-}
-
-function AnimatedTreatmentTooth({
-  fdi,
-  fallbackPosition,
-  base,
-  movement,
-  progress,
-  active,
-  selected,
-  highlighted,
-  onSelect,
-}: {
-  fdi: number;
-  fallbackPosition: [number, number, number];
-  base?: ToothPoseDto;
-  movement?: ToothMovementDto;
-  progress: number;
-  active: boolean;
-  selected: boolean;
-  highlighted: boolean;
-  onSelect: (fdi: number | null) => void;
-}) {
-  const group = useRef<THREE.Group>(null);
-  const start = base?.position ?? fallbackPosition;
-  const target = movement?.target.position ?? start;
-  const anatomicalRotation = idealRotation(fdi);
-  const startRotation =
-    THREE.MathUtils.degToRad(base?.rotation_deg ?? THREE.MathUtils.radToDeg(anatomicalRotation))
-    - anatomicalRotation;
-  const targetRotation =
-    THREE.MathUtils.degToRad(
-      movement?.target.rotation_deg
-        ?? base?.rotation_deg
-        ?? THREE.MathUtils.radToDeg(anatomicalRotation),
-    )
-    - anatomicalRotation;
-  const desired = useMemo(
-    () => new THREE.Vector3(
-      THREE.MathUtils.lerp(start[0], target[0], progress),
-      THREE.MathUtils.lerp(start[1], target[1], progress),
-      THREE.MathUtils.lerp(start[2], target[2], progress),
-    ),
-    [progress, start, target],
-  );
-  const desiredQuaternion = useMemo(
-    () => new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(
-        0,
-        THREE.MathUtils.lerp(startRotation, targetRotation, progress),
-        0,
-      ),
-    ),
-    [progress, startRotation, targetRotation],
-  );
-
-  useFrame((_, delta) => {
-    if (!group.current) return;
-    const alpha = 1 - Math.exp(-delta * 8.5);
-    group.current.position.lerp(desired, alpha);
-    group.current.quaternion.slerp(desiredQuaternion, alpha);
-  });
-
-  const color = selected ? SELECTED : highlighted ? HIGHLIGHTED : active ? ACTIVE : ENAMEL;
-  const size = attachmentSize(toothKind(fdi));
-
-  return (
-    <group ref={group} position={start} rotation={[0, startRotation, 0]}>
-      <AnatomicalTooth
-        fdi={fdi}
-        color={color}
-        emissive={color}
-        emissiveIntensity={active || selected || highlighted ? 0.16 : 0.01}
-        onSelect={onSelect}
-      />
-      {movement?.attachment && (
-        <mesh position={[0, 0, 0.42]} scale={size} castShadow>
-          <boxGeometry args={[1, 1, 1, 2, 2, 2]} />
-          <meshPhysicalMaterial
-            color={active ? "#bffaff" : "#e8e3d6"}
-            roughness={0.25}
-            clearcoat={0.4}
-          />
-        </mesh>
-      )}
-    </group>
-  );
-}
-
-function getProgress(activeStages: number, stage: number, mode: "planned" | "before" | "after") {
-  if (mode === "before") return 0;
-  if (mode === "after") return 1;
-  return THREE.MathUtils.smoothstep(Math.min(1, stage / Math.max(1, activeStages)), 0, 1);
-}
-
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="flex items-center gap-1.5">
-      <span className="h-2 w-2 rounded-full" style={{ background: color }} />
-      {label}
-    </span>
-  );
-}
-
-function ViewerLoading() {
-  return (
-    <div className="grid h-full min-h-[520px] place-items-center rounded-[28px] border border-white/10 bg-[#080d14]">
-      <div className="text-center">
-        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-cyan-300 border-t-transparent" />
-        <p className="mt-3 text-xs uppercase tracking-[0.2em] text-slate-500">Building treatment plan</p>
-      </div>
-    </div>
-  );
-}
-
-function ModelLoading() {
-  return (
-    <Html center>
-      <div className="whitespace-nowrap rounded-full border border-white/10 bg-[#0d1520]/95 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200 shadow-2xl">
-        Loading anatomical dentition
-      </div>
-    </Html>
   );
 }

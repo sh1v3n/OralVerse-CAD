@@ -1,7 +1,7 @@
 "use client";
 import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
-import { Html } from "@react-three/drei";
+import { Html, ContactShadows, Environment } from "@react-three/drei";
 import { Tooth } from "./Tooth";
 import { TOOTH_LAYOUT, type Severity } from "@/lib/teeth";
 import { useScanStore } from "@/lib/store";
@@ -32,7 +32,7 @@ export function DentalViewer() {
         <fog attach="fog" args={["#080d14", 9, 17]} />
         <DentalLighting />
         <Suspense fallback={<ModelLoading />}>
-          <group rotation={[-0.08, 0, 0]}>
+          <group rotation={[-0.05, 0, 0]}>
             <Gingiva />
             {TOOTH_LAYOUT.map((layout) => {
               const severity: Severity = severityByFdi.get(layout.fdi) ?? "green";
@@ -47,6 +47,15 @@ export function DentalViewer() {
               );
             })}
           </group>
+          <ContactShadows
+            position={[0, -1.8, 0]}
+            opacity={0.65}
+            scale={20}
+            blur={1.5}
+            far={4.5}
+            color="#080d14"
+          />
+          <Environment preset="city" environmentIntensity={0.8} />
         </Suspense>
         <ViewerEnvironment />
       </Canvas>
@@ -85,7 +94,7 @@ function ViewerBanner({
   if (!scanReady) {
     return (
       <div className="absolute top-3 left-3 right-3 sm:right-auto px-3 py-2 rounded-lg bg-panel/90 backdrop-blur text-xs text-gray-300 shadow">
-        Showing a sample arch in healthy green. Upload an OPG x-ray to see your own teeth.
+        Showing a sample anatomical arch. Upload an OPG x-ray to detect issues.
       </div>
     );
   }

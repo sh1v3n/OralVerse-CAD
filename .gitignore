@@ -50,3 +50,19 @@ Thumbs.db
 
 # Claude Code local state
 .claude/
+# Dental datasets
+datasets/
+archive.zip
+*.stl
+*.ply
+*.obj
+*.glb
+
+# FastAPI uploads
+uploads/
+
+# Logs
+logs/
+*.log
+
+*.tsbuildinfo

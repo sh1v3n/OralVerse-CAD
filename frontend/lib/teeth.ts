@@ -19,8 +19,8 @@ export const SEVERITY_COLOR: Record<Severity, string> = {
   red: "#ef4444",
 };
 
-export const ENAMEL_COLOR = "#f5f1e1";
-export const GUM_COLOR = "#e89999";
+export const ENAMEL_COLOR = "#fbf9f6";
+export const GUM_COLOR = "#d97c8e";
 export const BONE_COLOR = "#e4ceaa";
 
 export const ALL_FDI: number[] = [
@@ -45,45 +45,70 @@ export function isUpper(fdi: number): boolean {
 export interface ToothLayout {
   fdi: number;
   position: [number, number, number];
-  rotationY: number;
+  rotation: [number, number, number];
 }
 
 const ARCH_WIDTH = 3.15;
 const ARCH_DEPTH = 3;
-const ARCH_DEPTH_OFFSET = 0.72;
-export const UPPER_Y = 0.66;
-export const LOWER_Y = -0.66;
+const ARCH_DEPTH_OFFSET = 0.5;
+export const UPPER_Y = 0.75;
+export const LOWER_Y = -0.75;
 
-function archPoint(t: number, side: 1 | -1): [number, number] {
-  // Parametric horseshoe: t=0 midline (incisor), t=1 last molar (third molar).
-  const angle = (Math.PI / 2) * t;
-  const x = side * ARCH_WIDTH * Math.sin(angle);
-  const z = ARCH_DEPTH * (1 - Math.cos(angle));
-  return [x, z];
+export interface ToothLayout {
+  fdi: number;
+  position: [number, number, number];
+  rotation: [number, number, number];
 }
 
+const UPPER_ARCH = [
+  { x: 0.42, z: 0.00, yOffset: -0.05, rotY: 2, rotX: 8, rotZ: -2 }, // 1
+  { x: 1.20, z: 0.22, yOffset: 0.05, rotY: 12, rotX: 6, rotZ: -4 }, // 2
+  { x: 1.85, z: 0.80, yOffset: -0.05, rotY: 35, rotX: 2, rotZ: -6 }, // 3
+  { x: 2.25, z: 1.45, yOffset: 0.05, rotY: 45, rotX: 0, rotZ: 0 }, // 4
+  { x: 2.55, z: 2.15, yOffset: 0.10, rotY: 50, rotX: -2, rotZ: 2 }, // 5
+  { x: 2.90, z: 3.05, yOffset: 0.20, rotY: 55, rotX: -4, rotZ: 4 }, // 6
+  { x: 3.15, z: 3.95, yOffset: 0.35, rotY: 60, rotX: -6, rotZ: 6 }, // 7
+  { x: 3.35, z: 4.85, yOffset: 0.55, rotY: 65, rotX: -8, rotZ: 8 }, // 8
+];
+
+const LOWER_ARCH = [
+  { x: 0.26, z: 0.18, yOffset: 0.10, rotY: 0, rotX: -4, rotZ: 0 }, // 1
+  { x: 0.78, z: 0.38, yOffset: 0.10, rotY: 10, rotX: -4, rotZ: 0 }, // 2
+  { x: 1.48, z: 0.88, yOffset: 0.15, rotY: 30, rotX: -2, rotZ: 2 }, // 3
+  { x: 1.90, z: 1.55, yOffset: 0.05, rotY: 40, rotX: 0, rotZ: 0 }, // 4
+  { x: 2.20, z: 2.25, yOffset: -0.05, rotY: 45, rotX: 2, rotZ: -2 }, // 5
+  { x: 2.55, z: 3.15, yOffset: -0.15, rotY: 50, rotX: 4, rotZ: -4 }, // 6
+  { x: 2.75, z: 4.05, yOffset: -0.30, rotY: 55, rotX: 6, rotZ: -6 }, // 7
+  { x: 2.95, z: 4.95, yOffset: -0.50, rotY: 60, rotX: 8, rotZ: -8 }, // 8
+];
+
 function layoutQuadrant(quadrant: 1 | 2 | 3 | 4): ToothLayout[] {
-  const base = quadrant === 1 ? 11 : quadrant === 2 ? 21 : quadrant === 3 ? 31 : 41;
+  const base = quadrant === 1 ? 10 : quadrant === 2 ? 20 : quadrant === 3 ? 30 : 40;
   const upper = quadrant === 1 || quadrant === 2;
-  // Q1 (upper right) and Q4 (lower right) -> viewer's left = side -1
   const side: 1 | -1 = quadrant === 1 || quadrant === 4 ? -1 : 1;
   const y = upper ? UPPER_Y : LOWER_Y;
+  const arch = upper ? UPPER_ARCH : LOWER_ARCH;
 
   return Array.from({ length: 8 }, (_, i) => {
-    const position = i + 1;
-    const t = (position - 0.5) / 8;
-    const [x, z] = archPoint(t, side);
-    const rotationY = THREE.MathUtils.degToRad((x / ARCH_WIDTH) * 25);
+    const data = arch[i];
+    const px = side * data.x;
+    const pz = -data.z + ARCH_DEPTH_OFFSET;
+    const py = y + data.yOffset;
+    
+    const rotY = THREE.MathUtils.degToRad(side * data.rotY);
+    const rotX = THREE.MathUtils.degToRad(data.rotX);
+    const rotZ = THREE.MathUtils.degToRad(side * data.rotZ);
+
     return {
-      fdi: base + position,
-      position: [x, y, -z + ARCH_DEPTH_OFFSET] as [number, number, number],
-      rotationY,
+      fdi: base + i + 1,
+      position: [px, py, pz] as [number, number, number],
+      rotation: [rotX, rotY, rotZ] as [number, number, number],
     };
   });
 }
 
 export function idealRotation(fdi: number): number {
-  return TOOTH_LAYOUT.find((tooth) => tooth.fdi === fdi)?.rotationY ?? 0;
+  return TOOTH_LAYOUT.find((tooth) => tooth.fdi === fdi)?.rotation[1] ?? 0;
 }
 
 export const TOOTH_LAYOUT: ToothLayout[] = [
@@ -93,19 +118,17 @@ export const TOOTH_LAYOUT: ToothLayout[] = [
   ...layoutQuadrant(4),
 ];
 
-// Sample arch curve as a 3D Catmull-Rom for tube geometries (gums, jawbone).
-export function makeArchCurve(y: number, samples = 32): THREE.CatmullRomCurve3 {
+export function makeArchCurve(y: number, isUpper: boolean): THREE.CatmullRomCurve3 {
   const points: THREE.Vector3[] = [];
-  // Sweep right (side -1) from molar back to midline, then left (side +1) midline to molar.
-  for (let i = 0; i < samples; i++) {
-    const t = 1 - i / (samples - 1);
-    const [x, z] = archPoint(t, -1);
-    points.push(new THREE.Vector3(x, y, -z + ARCH_DEPTH_OFFSET));
+  const arch = isUpper ? UPPER_ARCH : LOWER_ARCH;
+  
+  for (let i = 7; i >= 0; i--) {
+    const t = arch[i];
+    points.push(new THREE.Vector3(-t.x, y + t.yOffset, -t.z + ARCH_DEPTH_OFFSET));
   }
-  for (let i = 1; i < samples; i++) {
-    const t = i / (samples - 1);
-    const [x, z] = archPoint(t, 1);
-    points.push(new THREE.Vector3(x, y, -z + ARCH_DEPTH_OFFSET));
+  for (let i = 0; i < 8; i++) {
+    const t = arch[i];
+    points.push(new THREE.Vector3(t.x, y + t.yOffset, -t.z + ARCH_DEPTH_OFFSET));
   }
   return new THREE.CatmullRomCurve3(points, false, "catmullrom", 0.5);
 }
