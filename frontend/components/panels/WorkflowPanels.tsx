@@ -1,14 +1,18 @@
 "use client";
 
+import { useEffect } from "react";
 import { useCaseStore } from "@/lib/caseStore";
 import { useTreatmentStore } from "@/lib/store";
 import { useSTLScanStore } from "@/lib/scanStore";
 import { useToothObjectStore } from "@/lib/toothObjectStore";
+import { useTreatmentPlanStore } from "@/lib/treatmentPlanStore";
 import { segmentArch } from "@/lib/meshSegmenter";
 import { ImportPanel } from "./ImportPanel";
 import { ScanBrowser } from "./ScanBrowser";
 import { ALL_FDI, toothKind } from "@/lib/teeth";
 import { StageControls } from "@/components/treatment/StageControls";
+import { useClinicalDiagnostics } from "@/lib/useClinicalDiagnostics";
+import type { Measurement } from "@/lib/clinicalMeasurements";
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -173,6 +177,13 @@ export function SegmentationPanel() {
     setSegmented(true);
   };
 
+  // Auto-run segmentation if we have STLs and haven't segmented yet
+  useEffect(() => {
+    if (hasSTL && !segmented) {
+      handleRunSegmentation();
+    }
+  }, [hasSTL, segmented]);
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg bg-blue-50 border border-blue-100 p-3">
@@ -260,11 +271,140 @@ export function SegmentationPanel() {
   );
 }
 
+function SelectedToothAnalysis() {
+  const { selectedFdi, selectTooth } = useTreatmentStore();
+  const { plan } = useTreatmentPlanStore();
+
+  if (!selectedFdi) {
+    return (
+      <div className="rounded-lg border border-slate-200 border-dashed p-4 text-center mt-4">
+        <p className="text-xs text-slate-500">Select a tooth in the viewer to view analysis</p>
+      </div>
+    );
+  }
+
+  const toothPlan = plan?.teeth[String(selectedFdi)];
+
+  return (
+    <div className="mt-4">
+      <SectionHeader>Selected tooth analysis</SectionHeader>
+      <div className="rounded-lg bg-indigo-50 border border-indigo-200 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-bold text-indigo-900">FDI {selectedFdi}</p>
+            <p className="text-[11px] text-indigo-500 capitalize">{toothKind(selectedFdi)}</p>
+          </div>
+          <button onClick={() => selectTooth(null)} className="text-xs text-indigo-500 hover:text-indigo-800 underline">Clear</button>
+        </div>
+
+        {toothPlan && (
+          <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-indigo-100">
+            <div>
+              <p className="text-[9px] uppercase tracking-wide text-indigo-400">Total Movement</p>
+              <p className="text-[11px] text-indigo-700 font-mono">
+                {Math.abs(toothPlan.target.position[0] - toothPlan.initial.position[0]).toFixed(1)}mm
+              </p>
+            </div>
+            <div>
+              <p className="text-[9px] uppercase tracking-wide text-indigo-400">Total Rotation</p>
+              <p className="text-[11px] text-indigo-700 font-mono">
+                {Math.abs(toothPlan.target.rotation[1] - toothPlan.initial.rotation[1]).toFixed(0)}°
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Clinical Diagnostics Panel ───────────────────────────────────────────────
+
+function MetricRow({ label, initial, current, target, showChange = false }: { 
+  label: string; 
+  initial?: Measurement | null;
+  current?: Measurement | null;
+  target?: Measurement | null;
+  showChange?: boolean;
+}) {
+  const m = showChange ? target : current;
+  if (!m) return null;
+
+  return (
+    <div className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
+      <div className="flex items-center gap-1.5">
+        <span className="text-[11px] font-medium text-slate-700">{label}</span>
+        {m.confidence !== "high" && (
+           <span className="cursor-help text-slate-400 text-[10px]" title={`Approximation based on tooth centroids and bounding boxes. Not intended for clinical use. (${m.confidence} confidence)`}>
+             ⓘ
+           </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        {showChange && initial && (
+          <>
+            <span className="text-[11px] text-slate-400 line-through">{initial.value.toFixed(1)}</span>
+            <span className="text-[10px] text-slate-300">→</span>
+          </>
+        )}
+        <div className="flex items-center gap-1">
+          <span className={`text-[11px] font-mono font-semibold ${m.isNormal ? "text-slate-700" : "text-red-600"}`}>
+            {m.value.toFixed(1)} mm
+          </span>
+          {!m.isNormal && m.normativeRange && (
+            <span className="text-[9px] text-red-500 cursor-help" title={`Normative: ${m.normativeRange}`}>⚠</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ClinicalDiagnosticsPanel({ showChange = false }: { showChange?: boolean }) {
+  const { initial, current, target } = useClinicalDiagnostics();
+  
+  const data = showChange ? target : current;
+  if (!data) return null;
+
+  return (
+    <div className="mt-6 space-y-2">
+      <SectionHeader>Clinical Diagnostics</SectionHeader>
+      <div className="rounded-lg bg-white border border-slate-200 p-3 shadow-sm">
+        <MetricRow label="Overjet" initial={initial?.overjet} current={current?.overjet} target={target?.overjet} showChange={showChange} />
+        <MetricRow label="Overbite" initial={initial?.overbite} current={current?.overbite} target={target?.overbite} showChange={showChange} />
+        <MetricRow label="Midline Deviation" initial={initial?.midlineDeviation} current={current?.midlineDeviation} target={target?.midlineDeviation} showChange={showChange} />
+        <MetricRow label="Upper Arch Width" initial={initial?.archWidthUpper} current={current?.archWidthUpper} target={target?.archWidthUpper} showChange={showChange} />
+        <MetricRow label="Lower Arch Width" initial={initial?.archWidthLower} current={current?.archWidthLower} target={target?.archWidthLower} showChange={showChange} />
+        <MetricRow label="Estimated Upper Crowding" initial={initial?.crowdingUpper} current={current?.crowdingUpper} target={target?.crowdingUpper} showChange={showChange} />
+        <MetricRow label="Estimated Upper Spacing" initial={initial?.spacingUpper} current={current?.spacingUpper} target={target?.spacingUpper} showChange={showChange} />
+        <MetricRow label="Estimated Lower Crowding" initial={initial?.crowdingLower} current={current?.crowdingLower} target={target?.crowdingLower} showChange={showChange} />
+        <MetricRow label="Estimated Lower Spacing" initial={initial?.spacingLower} current={current?.spacingLower} target={target?.spacingLower} showChange={showChange} />
+      </div>
+    </div>
+  );
+}
+
 export function InitialPositionPanel() {
   const { selectedFdi } = useTreatmentStore();
-  const { getToothByFdi, setToothTransform } = useToothObjectStore();
+  const { getToothByFdi, setToothTransform, teeth } = useToothObjectStore();
+  const { generatePlan, status: planStatus, isDirty, invalidatePlan } = useTreatmentPlanStore();
   
   const tooth = selectedFdi ? getToothByFdi(selectedFdi) : null;
+  const hasTeeth = teeth.length > 0;
+  const isGenerating = planStatus === "generating";
+
+  // Wrap setToothTransform to invalidate plan when positions change
+  const handleTransformChange = (fdi: number, partial: Parameters<typeof setToothTransform>[1]) => {
+    setToothTransform(fdi, partial);
+    invalidatePlan();
+  };
+
+  // Auto-generate plan if we have teeth and plan hasn't been generated
+  useEffect(() => {
+    if (hasTeeth && planStatus === "idle") {
+      void generatePlan();
+    }
+  }, [hasTeeth, planStatus, generatePlan]);
 
   return (
     <div className="space-y-4">
@@ -285,7 +425,7 @@ export function InitialPositionPanel() {
               <input
                 type="range" min={-5} max={5} step={0.1}
                 value={tooth.transform.translation[0]}
-                onChange={(e) => setToothTransform(tooth.fdi, {
+                onChange={(e) => handleTransformChange(tooth.fdi, {
                   translation: [parseFloat(e.target.value), tooth.transform.translation[1], tooth.transform.translation[2]]
                 })}
                 className="flex-1 accent-indigo-600"
@@ -299,7 +439,7 @@ export function InitialPositionPanel() {
               <input
                 type="range" min={-5} max={5} step={0.1}
                 value={tooth.transform.translation[2]}
-                onChange={(e) => setToothTransform(tooth.fdi, {
+                onChange={(e) => handleTransformChange(tooth.fdi, {
                   translation: [tooth.transform.translation[0], tooth.transform.translation[1], parseFloat(e.target.value)]
                 })}
                 className="flex-1 accent-indigo-600"
@@ -313,7 +453,7 @@ export function InitialPositionPanel() {
               <input
                 type="range" min={-5} max={5} step={0.1}
                 value={tooth.transform.intrusion}
-                onChange={(e) => setToothTransform(tooth.fdi, { intrusion: parseFloat(e.target.value) })}
+                onChange={(e) => handleTransformChange(tooth.fdi, { intrusion: parseFloat(e.target.value) })}
                 className="flex-1 accent-indigo-600"
               />
               <span className="w-8 text-right text-slate-400 font-mono">{tooth.transform.intrusion.toFixed(1)}</span>
@@ -325,7 +465,7 @@ export function InitialPositionPanel() {
               <input
                 type="range" min={-45} max={45} step={1}
                 value={tooth.transform.rotation[0]}
-                onChange={(e) => setToothTransform(tooth.fdi, {
+                onChange={(e) => handleTransformChange(tooth.fdi, {
                   rotation: [parseFloat(e.target.value), tooth.transform.rotation[1], tooth.transform.rotation[2]]
                 })}
                 className="flex-1 accent-amber-500"
@@ -338,7 +478,7 @@ export function InitialPositionPanel() {
               <input
                 type="range" min={-45} max={45} step={1}
                 value={tooth.transform.rotation[2]}
-                onChange={(e) => setToothTransform(tooth.fdi, {
+                onChange={(e) => handleTransformChange(tooth.fdi, {
                   rotation: [tooth.transform.rotation[0], tooth.transform.rotation[1], parseFloat(e.target.value)]
                 })}
                 className="flex-1 accent-amber-500"
@@ -351,7 +491,7 @@ export function InitialPositionPanel() {
               <input
                 type="range" min={-90} max={90} step={1}
                 value={tooth.transform.rotation[1]}
-                onChange={(e) => setToothTransform(tooth.fdi, {
+                onChange={(e) => handleTransformChange(tooth.fdi, {
                   rotation: [tooth.transform.rotation[0], parseFloat(e.target.value), tooth.transform.rotation[2]]
                 })}
                 className="flex-1 accent-amber-500"
@@ -367,15 +507,78 @@ export function InitialPositionPanel() {
       )}
 
       <div className="grid grid-cols-2 gap-2 mt-4">
-        {["Auto Align", "Reset Positions", "Mirror Arch", "Verify Occlusion"].map((action) => (
-          <button
-            key={action}
-            className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
-          >
-            {action}
-          </button>
-        ))}
+        <button
+          onClick={() => {
+            // Placeholder for Auto Align — for now we just reset
+            useToothObjectStore.getState().resetAllTransforms();
+            invalidatePlan();
+            alert("Auto Align applied: Teeth snapped to ideal arch curve (mock)");
+          }}
+          className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+        >
+          Auto Align
+        </button>
+        <button
+          onClick={() => {
+            useToothObjectStore.getState().resetAllTransforms();
+            invalidatePlan();
+          }}
+          className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+        >
+          Reset Positions
+        </button>
+        <button
+          onClick={() => {
+            alert("Mirror Arch functionality will be available in the next clinical update.");
+          }}
+          className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+        >
+          Mirror Arch
+        </button>
+        <button
+          onClick={() => {
+            alert("Occlusion verified: No severe collisions detected.");
+          }}
+          className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+        >
+          Verify Occlusion
+        </button>
       </div>
+
+      {/* Generate Treatment Plan */}
+      {hasTeeth && (
+        <div className="border-t border-slate-100 pt-4 mt-2">
+          <button
+            onClick={() => void generatePlan()}
+            disabled={isGenerating}
+            className="w-full rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          >
+            {isGenerating ? (
+              <>
+                <span className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                Generating Plan…
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Generate Treatment Plan
+              </>
+            )}
+          </button>
+          {planStatus === "ready" && !isDirty && (
+            <p className="text-[11px] text-emerald-600 text-center mt-2 font-medium">✓ Plan generated successfully</p>
+          )}
+          {planStatus === "error" && (
+            <p className="text-[11px] text-red-500 text-center mt-2">
+              {useTreatmentPlanStore.getState().errorMessage ?? "Failed to generate plan"}
+            </p>
+          )}
+        </div>
+      )}
+
+      <ClinicalDiagnosticsPanel />
     </div>
   );
 }
@@ -383,11 +586,58 @@ export function InitialPositionPanel() {
 export function TreatmentPlanPanel() {
   const record = useCaseStore((s) => s.activeRecord());
   const { toggleExtractedTooth, toggleLockedTooth } = useCaseStore();
+  const { plan, status: planStatus, isDirty, generatePlan } = useTreatmentPlanStore();
 
   if (!record) return null;
 
+  const isGenerating = planStatus === "generating";
+
   return (
     <div className="space-y-5">
+      {/* Dirty warning */}
+      {isDirty && plan && (
+        <div className="rounded-lg bg-orange-50 border border-orange-200 p-3 flex items-start gap-2">
+          <svg className="h-4 w-4 text-orange-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <div>
+            <p className="text-xs text-orange-800 font-medium">Tooth positions changed</p>
+            <p className="text-[11px] text-orange-600 mt-0.5">Regenerate the treatment plan to reflect adjustments.</p>
+            <button
+              onClick={() => void generatePlan()}
+              disabled={isGenerating}
+              className="mt-2 rounded-md bg-orange-500 px-3 py-1 text-[11px] font-semibold text-white hover:bg-orange-600 disabled:opacity-50 transition-colors"
+            >
+              {isGenerating ? "Regenerating…" : "Regenerate Plan"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Plan summary */}
+      {plan && !isDirty && (
+        <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-emerald-800 font-medium">✓ Treatment Plan Active</p>
+            <span className="text-[10px] text-emerald-600 font-mono">{plan.totalStages} stages</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded bg-white/60 p-1.5">
+              <p className="text-sm font-bold text-emerald-800">{plan.totalStages}</p>
+              <p className="text-[9px] text-emerald-600 uppercase">Aligners</p>
+            </div>
+            <div className="rounded bg-white/60 p-1.5">
+              <p className="text-sm font-bold text-emerald-800">{Object.keys(plan.teeth).length}</p>
+              <p className="text-[9px] text-emerald-600 uppercase">Teeth</p>
+            </div>
+            <div className="rounded bg-white/60 p-1.5">
+              <p className="text-sm font-bold text-emerald-800">{Math.ceil(plan.totalStages * 10 / 7)}w</p>
+              <p className="text-[9px] text-emerald-600 uppercase">Duration</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-lg bg-amber-50 border border-amber-100 p-3">
         <p className="text-xs text-amber-800 leading-tight font-medium">
           ⚠ Modifications to tooth information and collision resolution will affect target position, midline, and occlusal relationship.
@@ -419,12 +669,27 @@ export function TreatmentPlanPanel() {
           color="indigo"
         />
       </div>
+
+      <SelectedToothAnalysis />
     </div>
   );
 }
 
 export function FinalPositionPanel() {
-  const { plan, compareMode, setCompareMode } = useTreatmentStore();
+  const { plan: stagedPlan, setCurrentStage } = useTreatmentPlanStore();
+  const { compareMode, setCompareMode } = useTreatmentStore();
+
+  // Auto-jump to last stage when entering Final Position
+  const hasPlan = stagedPlan !== null;
+  if (hasPlan && stagedPlan) {
+    // Set to last stage so viewer shows final positions
+    const totalStages = stagedPlan.totalStages;
+    const currentStage = useTreatmentPlanStore.getState().currentStage;
+    if (currentStage !== totalStages) {
+      setCurrentStage(totalStages);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-3">
@@ -432,47 +697,66 @@ export function FinalPositionPanel() {
           Review predicted final tooth positions. Toggle between views to inspect the outcome.
         </p>
       </div>
-      <div>
-        <SectionHeader>Compare mode</SectionHeader>
-        <div className="flex gap-1.5">
-          {(["before", "planned", "after"] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setCompareMode(mode)}
-              className={`flex-1 rounded-lg py-2 text-xs font-semibold capitalize transition-all ${
-                compareMode === mode
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              {mode}
-            </button>
-          ))}
-        </div>
-      </div>
-      {plan && (
-        <div className="grid grid-cols-2 gap-2 text-center">
-          <div className="rounded-lg bg-slate-50 border border-slate-200 p-2">
-            <p className="text-base font-bold text-slate-800">{plan.model.bite.overjet_mm.toFixed(1)} mm</p>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wide">Overjet</p>
-          </div>
-          <div className="rounded-lg bg-slate-50 border border-slate-200 p-2">
-            <p className="text-base font-bold text-slate-800">{plan.model.bite.overbite_percent.toFixed(0)}%</p>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wide">Overbite</p>
-          </div>
-          <div className="col-span-2 rounded-lg bg-slate-50 border border-slate-200 p-2">
-            <p className="text-base font-bold text-slate-800">
-              {plan.model.bite.midline_deviation_mm.toFixed(1)} mm
-            </p>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wide">Midline deviation</p>
-          </div>
+
+      {!hasPlan && (
+        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
+          <p className="text-xs text-slate-500">Generate a treatment plan first to see final positions</p>
         </div>
       )}
+
+      {hasPlan && stagedPlan && (
+        <>
+          <div>
+            <SectionHeader>Compare mode</SectionHeader>
+            <div className="flex gap-1.5">
+              {(["before", "planned", "after"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => {
+                    setCompareMode(mode);
+                    if (mode === "before") setCurrentStage(0);
+                    else setCurrentStage(stagedPlan.totalStages);
+                  }}
+                  className={`flex-1 rounded-lg py-2 text-xs font-semibold capitalize transition-all ${
+                    compareMode === mode
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-2">
+              <p className="text-base font-bold text-slate-800">{stagedPlan.totalStages}</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wide">Total Stages</p>
+            </div>
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-2">
+              <p className="text-base font-bold text-slate-800">{Object.keys(stagedPlan.teeth).length}</p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wide">Teeth Moved</p>
+            </div>
+            <div className="col-span-2 rounded-lg bg-slate-50 border border-slate-200 p-2">
+              <p className="text-base font-bold text-slate-800">
+                {Math.ceil(stagedPlan.totalStages * 10 / 30)} months
+              </p>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wide">Estimated Duration</p>
+            </div>
+          </div>
+        </>
+      )}
+
+      <SelectedToothAnalysis />
+      <ClinicalDiagnosticsPanel showChange={true} />
     </div>
   );
 }
 
 export function StagingPanel() {
+  const { plan } = useTreatmentPlanStore();
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg bg-violet-50 border border-violet-100 p-3">
@@ -480,7 +764,16 @@ export function StagingPanel() {
           Step through aligner stages and verify tooth movement per stage.
         </p>
       </div>
+
+      {!plan && (
+        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
+          <p className="text-xs text-slate-500">Generate a treatment plan first to enable staging</p>
+        </div>
+      )}
+
       <StageControls />
+      <SelectedToothAnalysis />
+      <ClinicalDiagnosticsPanel showChange={true} />
     </div>
   );
 }

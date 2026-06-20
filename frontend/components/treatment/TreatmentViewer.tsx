@@ -42,7 +42,7 @@ function ScanNotLoadedOverlay() {
 const CAMERA_POSITIONS: Record<CameraView, [number, number, number]> = {
   both:       [0,  5.0,  9.0],
   labial:     [0,  1.5,  10.0],
-  lingual:    [0,  1.5, -10.0],
+  lingual:    [0,  1.5, -3.0], // Positioned inside the arch looking outward
   maxillary:  [0, 12.0,  0.5],
   mandibular: [0,-12.0,  0.5],
   right:      [-10, 2.0, 2.0],

@@ -11,9 +11,31 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from ai.orthodontics import build_treatment_plan
+from ai.orthodontics.staged_planner import build_staged_plan
 from ai.orthodontics.reasoning import answer_with_local_llm
 
 router = APIRouter(prefix="/api/orthodontics", tags=["orthodontics"])
+
+
+# ── Pydantic models for the new staged-plan endpoint ───────────────────────────
+
+
+class StagedToothTransform(BaseModel):
+    position: list[float] = Field(min_length=3, max_length=3)
+    rotation: list[float] = Field(min_length=3, max_length=3)
+
+
+class StagedToothInput(BaseModel):
+    id: str
+    initial: StagedToothTransform
+    target: StagedToothTransform
+
+
+class StagedPlanInput(BaseModel):
+    teeth: list[StagedToothInput]
+
+
+# ── Pydantic models for the legacy plan endpoint ──────────────────────────────
 
 
 class ToothPose(BaseModel):
@@ -39,6 +61,20 @@ class ModelInput(BaseModel):
 class CopilotInput(BaseModel):
     question: str = Field(min_length=2, max_length=500)
     plan: dict
+
+
+# ── Endpoints ──────────────────────────────────────────────────────────────────
+
+
+@router.post("/staged-plan")
+def staged_plan(payload: StagedPlanInput) -> dict:
+    """Generate a clinically-constrained staged treatment plan.
+
+    Accepts initial and target transforms for each tooth and returns
+    per-stage interpolated transforms respecting movement limits.
+    """
+    teeth_dicts = [t.model_dump() for t in payload.teeth]
+    return build_staged_plan(teeth_dicts)
 
 
 @router.get("/demo-plan")
