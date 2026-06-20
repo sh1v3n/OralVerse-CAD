@@ -213,26 +213,40 @@ The panel should show a summary count of verified vs unverified teeth before all
 
 ## Migration Plan to ML Segmentation
 
-### Step 1 — Move segmentation to the backend
+### Step 1 — Move segmentation to the backend ✅ DONE
 
-Move `meshSegmenter.ts` logic to Python (`ai/orthodontics/segmentation/heuristic.py`). The frontend sends the raw STL vertices and faces to `POST /api/orthodontics/segment` and receives label assignments back.
+`meshSegmenter.ts` logic ported to `ai/orthodontics/segmentation/heuristic.py`.
+Frontend serializes `THREE.BufferGeometry` → `{vertices, faces}` JSON and calls
+`POST /api/orthodontics/segment`; all imports of `meshSegmenter.ts` removed.
 
-This unblocks the main thread and makes the Python inference path available.
+**Key improvements over the TypeScript original:**
+- Adaptive gingiva Y-threshold via histogram valley detection (vs. fixed 35%).
+- Confidence scoring per tooth (size, X-position, cluster-count signals).
+- Long-axis estimation via PCA on face centroids.
+- Runs on the backend, unblocking the JS main thread.
 
-**Estimated effort:** 3 days. The algorithm is straightforward to port.
+### Step 2 — Implement segmentation API endpoint ✅ DONE
 
-**Blocker:** The frontend currently passes `THREE.BufferGeometry` internally. We need to serialize vertices/faces to JSON or binary for the HTTP call.
-
-### Step 2 — Implement segmentation API endpoint
-
-```python
-# HeuristicSegmenter wraps the ported Python algorithm
-class HeuristicSegmenter:
-    def segment(self, mesh: DentalMesh) -> SegmentationResult:
-        ...  # port of meshSegmenter.ts algorithm
+```
+POST /api/orthodontics/segment
 ```
 
-Add `POST /api/orthodontics/segment`. Wire `HeuristicSegmenter` as default.
+`HeuristicSegmenter` wired as default; override with `ORALVERSE_SEGMENTER=<name>`.
+
+Package layout:
+```
+ai/orthodontics/segmentation/
+├── __init__.py        # exports DentalMesh, SegmentationResult, get_segmenter
+├── interface.py       # DentalMesh, ToothSegment, SegmentationResult, Segmenter
+├── heuristic.py       # HeuristicSegmenter + helper functions (all importable for tests)
+├── factory.py         # get_segmenter() reads ORALVERSE_SEGMENTER env var
+└── tests/
+    ├── __init__.py
+    └── test_heuristic.py  # 26 unit tests (adaptive threshold, clustering, FDI)
+```
+
+26 unit tests covering adaptive gingiva threshold, spatial clustering, K-means
+fallback, small-cluster merging, and FDI assignment — all passing.
 
 ### Step 3 — Add confidence visualization
 

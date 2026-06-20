@@ -107,29 +107,25 @@ export const useTreatmentPlanStore = create<TreatmentPlanState>((set, get) => ({
     try {
       // Build input from current tooth objects
       const input: StagedToothInput[] = teeth.map((tooth) => {
-        // Initial = the centroid position of the tooth + any manual adjustments
+        // Initial = raw scan position (where the tooth is now)
         const initialPos: [number, number, number] = [
-          tooth.centroid.x + tooth.transform.translation[0],
-          tooth.centroid.y + tooth.transform.translation[1] + tooth.transform.intrusion,
-          tooth.centroid.z + tooth.transform.translation[2],
-        ];
-        const initialRot: [number, number, number] = [
-          tooth.transform.rotation[0],
-          tooth.transform.rotation[1],
-          tooth.transform.rotation[2],
-        ];
-
-        // Target = ideal aligned position (for now, just apply a small correction)
-        // In a real system, the clinician sets the target in the UI.
-        // For now we use the initial position as-is — the clinician's manual
-        // adjustments in InitialPosition ARE the target corrections.
-        // We simulate a treatment by computing a target that "normalizes" the arch.
-        const targetPos: [number, number, number] = [
           tooth.centroid.x,
           tooth.centroid.y,
           tooth.centroid.z,
         ];
-        const targetRot: [number, number, number] = [0, 0, 0];
+        const initialRot: [number, number, number] = [0, 0, 0];
+
+        // Target = clinician's adjusted position (where they want the tooth to end up)
+        const targetPos: [number, number, number] = [
+          tooth.centroid.x + tooth.transform.translation[0],
+          tooth.centroid.y + tooth.transform.translation[1] + tooth.transform.intrusion,
+          tooth.centroid.z + tooth.transform.translation[2],
+        ];
+        const targetRot: [number, number, number] = [
+          tooth.transform.rotation[0],
+          tooth.transform.rotation[1],
+          tooth.transform.rotation[2],
+        ];
 
         return {
           id: String(tooth.fdi),

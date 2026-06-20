@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import * as THREE from "three";
 import { useCaseStore } from "@/lib/caseStore";
 import { useTreatmentStore } from "@/lib/store";
 import { useSTLScanStore } from "@/lib/scanStore";
 import { useToothObjectStore } from "@/lib/toothObjectStore";
+import type { ToothObject, VerificationState } from "@/lib/toothObjectStore";
+import { emptyTransform, getSegmentationColor } from "@/lib/toothObjectStore";
 import { useTreatmentPlanStore } from "@/lib/treatmentPlanStore";
-import { segmentArch } from "@/lib/meshSegmenter";
+import { segmentArchMesh, type SegmentationResponse } from "@/lib/api";
 import { ImportPanel } from "./ImportPanel";
 import { ScanBrowser } from "./ScanBrowser";
 import { ALL_FDI, toothKind } from "@/lib/teeth";
@@ -147,6 +150,185 @@ export function PreprocessingPanel() {
   );
 }
 
+// ── Geometry serialisation ────────────────────────────────────────────────────
+
+function serializeGeometry(geometry: THREE.BufferGeometry): {
+  vertices: number[][];
+  faces: number[][];
+} {
+  const pos = geometry.getAttribute("position") as THREE.BufferAttribute;
+  const idx = geometry.getIndex();
+
+  const vertices: number[][] = [];
+  for (let i = 0; i < pos.count; i++) {
+    vertices.push([pos.getX(i), pos.getY(i), pos.getZ(i)]);
+  }
+
+  const faces: number[][] = [];
+  if (idx) {
+    for (let i = 0; i < idx.count; i += 3) {
+      faces.push([idx.getX(i), idx.getX(i + 1), idx.getX(i + 2)]);
+    }
+  } else {
+    for (let i = 0; i < pos.count; i += 3) {
+      faces.push([i, i + 1, i + 2]);
+    }
+  }
+
+  return { vertices, faces };
+}
+
+function buildToothGeometry(
+  faceIndices: number[],
+  geometry: THREE.BufferGeometry,
+): THREE.BufferGeometry {
+  const pos = geometry.getAttribute("position") as THREE.BufferAttribute;
+  const idx = geometry.getIndex();
+  const positions = new Float32Array(faceIndices.length * 9);
+  let base = 0;
+
+  for (const fi of faceIndices) {
+    let ai: number, bi: number, ci: number;
+    if (idx) {
+      ai = idx.getX(fi * 3);
+      bi = idx.getX(fi * 3 + 1);
+      ci = idx.getX(fi * 3 + 2);
+    } else {
+      ai = fi * 3;
+      bi = fi * 3 + 1;
+      ci = fi * 3 + 2;
+    }
+    positions[base++] = pos.getX(ai); positions[base++] = pos.getY(ai); positions[base++] = pos.getZ(ai);
+    positions[base++] = pos.getX(bi); positions[base++] = pos.getY(bi); positions[base++] = pos.getZ(bi);
+    positions[base++] = pos.getX(ci); positions[base++] = pos.getY(ci); positions[base++] = pos.getZ(ci);
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geom.computeVertexNormals();
+  geom.computeBoundingBox();
+  return geom;
+}
+
+function buildToothObjects(
+  response: SegmentationResponse,
+  sourceGeometry: THREE.BufferGeometry,
+  arch: "upper" | "lower",
+): ToothObject[] {
+  return response.segments.map((seg, i) => {
+    const geom = buildToothGeometry(seg.face_mask, sourceGeometry);
+    const centroid = new THREE.Vector3(...seg.centroid);
+
+    return {
+      id: `tooth-${seg.fdi}`,
+      fdi: seg.fdi,
+      arch,
+      kind: toothKind(seg.fdi),
+      geometry: geom,
+      centroid,
+      boundingBox: geom.boundingBox!.clone(),
+      visible: true,
+      transform: emptyTransform(),
+      segmentation: {
+        confidence: seg.confidence,
+        source: "heuristic" as const,
+        color: getSegmentationColor(i),
+        triangleCount: seg.face_mask.length,
+        verificationState: "auto" as const,
+      },
+    };
+  });
+}
+
+function buildGingivaGeometry(
+  gingivaFaces: number[],
+  sourceGeometry: THREE.BufferGeometry,
+): THREE.BufferGeometry {
+  return buildToothGeometry(gingivaFaces, sourceGeometry);
+}
+
+// ── Verification badge ────────────────────────────────────────────────────────
+
+function VerificationBadge({ state }: { state: VerificationState }) {
+  const cfg = {
+    auto:      { label: "Auto",     cls: "bg-slate-100 text-slate-500" },
+    reviewed:  { label: "Reviewed", cls: "bg-blue-100 text-blue-700" },
+    corrected: { label: "Edited",   cls: "bg-amber-100 text-amber-700" },
+    verified:  { label: "Verified", cls: "bg-emerald-100 text-emerald-700" },
+  }[state];
+  return (
+    <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${cfg.cls}`}>
+      {cfg.label}
+    </span>
+  );
+}
+
+// ── FDI reassign picker ───────────────────────────────────────────────────────
+
+function FdiReassignPicker({
+  tooth,
+  onClose,
+}: {
+  tooth: ToothObject;
+  onClose: () => void;
+}) {
+  const { reassignFdi } = useToothObjectStore();
+  const [pending, setPending] = useState<number>(tooth.fdi);
+
+  const upper = ALL_FDI.filter((f) => f < 30);
+  const lower = ALL_FDI.filter((f) => f >= 30);
+
+  return (
+    <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-indigo-900">Reassign FDI {tooth.fdi}</p>
+        <button onClick={onClose} className="text-[10px] text-indigo-400 hover:text-indigo-700">✕</button>
+      </div>
+      <div className="space-y-1.5">
+        {[upper, lower].map((row, ri) => (
+          <div key={ri} className="flex gap-0.5 justify-center flex-wrap">
+            {(ri === 0 ? [...row].reverse() : row).map((fdi) => (
+              <button
+                key={fdi}
+                onClick={() => setPending(fdi)}
+                className={`h-7 w-6 rounded border text-[9px] font-bold transition-all ${
+                  fdi === pending
+                    ? "border-indigo-500 bg-indigo-600 text-white"
+                    : fdi === tooth.fdi
+                    ? "border-slate-300 bg-slate-200 text-slate-500"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-indigo-50"
+                }`}
+              >
+                {fdi}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={onClose}
+          className="flex-1 rounded border border-slate-200 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+        <button
+          disabled={pending === tooth.fdi}
+          onClick={() => {
+            reassignFdi(tooth.fdi, pending);
+            onClose();
+          }}
+          className="flex-1 rounded bg-indigo-600 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-40"
+        >
+          Reassign → {pending}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── SegmentationPanel ─────────────────────────────────────────────────────────
+
 export function SegmentationPanel() {
   const { selectedFdi, selectTooth } = useTreatmentStore();
   const upperArch = useSTLScanStore((s) => s.upperArch);
@@ -155,118 +337,270 @@ export function SegmentationPanel() {
   const lowerInfo = useSTLScanStore((s) => s.lowerInfo);
   const segmented = useSTLScanStore((s) => s.segmented);
   const setSegmented = useSTLScanStore((s) => s.setSegmented);
-  const { setSegmentedTeeth, setGingiva, clearSegmentation, getToothByFdi, teeth } = useToothObjectStore();
+  const {
+    setSegmentedTeeth, setGingiva, clearSegmentation,
+    getToothByFdi, teeth, selectedFdis, toggleTooth,
+    mergeTeeth, verifyTooth, setVerificationState,
+    getVerificationSummary, setShowSegmentationColors,
+  } = useToothObjectStore();
   const hasSTL = upperInfo !== null || lowerInfo !== null;
 
-  const handleRunSegmentation = () => {
+  const [isSegmenting, setIsSegmenting] = useState(false);
+  const [segmentError, setSegmentError] = useState<string | null>(null);
+  const [reassignTarget, setReassignTarget] = useState<number | null>(null);
+
+  const handleRunSegmentation = async () => {
     if (!upperArch && !lowerArch) return;
-    
-    const newTeeth = [];
-    if (upperArch) {
-      const { teeth: upperTeeth, gingivaGeometry: upperGingiva } = segmentArch(upperArch, "upper");
-      newTeeth.push(...upperTeeth);
-      setGingiva("upper", upperGingiva);
+    setIsSegmenting(true);
+    setSegmentError(null);
+
+    try {
+      const newTeeth: ToothObject[] = [];
+
+      if (upperArch) {
+        const { vertices, faces } = serializeGeometry(upperArch);
+        const response = await segmentArchMesh(vertices, faces, "upper");
+        newTeeth.push(...buildToothObjects(response, upperArch, "upper"));
+        setGingiva("upper", buildGingivaGeometry(response.gingiva_faces, upperArch));
+      }
+      if (lowerArch) {
+        const { vertices, faces } = serializeGeometry(lowerArch);
+        const response = await segmentArchMesh(vertices, faces, "lower");
+        newTeeth.push(...buildToothObjects(response, lowerArch, "lower"));
+        setGingiva("lower", buildGingivaGeometry(response.gingiva_faces, lowerArch));
+      }
+
+      setSegmentedTeeth(newTeeth);
+      setSegmented(true);
+      setShowSegmentationColors(true);
+    } catch (err: unknown) {
+      setSegmentError(err instanceof Error ? err.message : "Segmentation failed");
+    } finally {
+      setIsSegmenting(false);
     }
-    if (lowerArch) {
-      const { teeth: lowerTeeth, gingivaGeometry: lowerGingiva } = segmentArch(lowerArch, "lower");
-      newTeeth.push(...lowerTeeth);
-      setGingiva("lower", lowerGingiva);
-    }
-    
-    setSegmentedTeeth(newTeeth);
-    setSegmented(true);
   };
 
-  // Auto-run segmentation if we have STLs and haven't segmented yet
+  // Auto-run segmentation when STLs are loaded and segmentation hasn't run yet
   useEffect(() => {
-    if (hasSTL && !segmented) {
-      handleRunSegmentation();
+    if (hasSTL && !segmented && !isSegmenting) {
+      void handleRunSegmentation();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasSTL, segmented]);
+
+  const selectedArray = Array.from(selectedFdis);
+  const canMerge = selectedArray.length === 2;
+  const summary = segmented ? getVerificationSummary() : null;
+  const allVerified = summary ? summary.auto === 0 && summary.corrected === 0 : false;
+
+  // Sort teeth: upper Q1 desc, Q2 asc, then lower Q4 desc, Q3 asc
+  const sortedTeeth = [...teeth].sort((a, b) => {
+    const archOrder = (t: ToothObject) => (t.arch === "upper" ? 0 : 1);
+    if (archOrder(a) !== archOrder(b)) return archOrder(a) - archOrder(b);
+    return a.fdi - b.fdi;
+  });
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg bg-blue-50 border border-blue-100 p-3">
-        <p className="text-xs text-blue-800 leading-tight">
-          Review AI-generated tooth segmentation boundaries and FDI numbering. Click any tooth to inspect.
-        </p>
-      </div>
+      {/* Status / run button */}
+      {isSegmenting && (
+        <div className="rounded-lg bg-indigo-50 border border-indigo-200 p-3 flex items-center gap-2">
+          <span className="h-3.5 w-3.5 rounded-full border-2 border-indigo-300 border-t-indigo-600 animate-spin shrink-0" />
+          <p className="text-xs text-indigo-800">Segmenting arch on server…</p>
+        </div>
+      )}
 
-      {hasSTL && !segmented && (
+      {segmentError && (
+        <div className="rounded-lg bg-red-50 border border-red-200 p-3">
+          <p className="text-xs text-red-700 font-medium">Segmentation error</p>
+          <p className="text-[11px] text-red-500 mt-0.5">{segmentError}</p>
+          <button onClick={() => void handleRunSegmentation()} className="mt-2 text-[10px] text-red-600 underline font-semibold">
+            Retry
+          </button>
+        </div>
+      )}
+
+      {hasSTL && !segmented && !isSegmenting && !segmentError && (
         <button
-          onClick={handleRunSegmentation}
+          onClick={() => void handleRunSegmentation()}
           className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 transition-colors"
         >
           Run Segmentation
         </button>
       )}
 
-      {segmented && (
-        <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 flex items-center justify-between">
-          <p className="text-xs text-emerald-800 font-medium">Segmentation Complete ({teeth.length} teeth)</p>
-          <button
-            onClick={() => {
-              clearSegmentation();
-              setSegmented(false);
-            }}
-            className="text-[10px] text-emerald-600 hover:text-emerald-800 underline font-semibold uppercase tracking-wider"
-          >
-            Reset
-          </button>
-        </div>
-      )}
-
-      {/* STL mesh info when scans are loaded */}
-      {hasSTL && (
-        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 space-y-1.5">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Loaded mesh</p>
-          {upperInfo && (
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-600 truncate max-w-[140px]">{upperInfo.fileName}</span>
-              <span className="text-slate-400">{(upperInfo.triangles / 1000).toFixed(0)}K △</span>
-            </div>
-          )}
-          {lowerInfo && (
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-600 truncate max-w-[140px]">{lowerInfo.fileName}</span>
-              <span className="text-slate-400">{(lowerInfo.triangles / 1000).toFixed(0)}K △</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div>
-        <SectionHeader>Selected tooth</SectionHeader>
-        {selectedFdi ? (
-          <div className="flex items-center justify-between rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2">
-            <div>
-              <p className="text-sm font-bold text-indigo-900">FDI {selectedFdi}</p>
-              <p className="text-[11px] text-indigo-500 capitalize">{toothKind(selectedFdi)}</p>
-              {segmented && getToothByFdi(selectedFdi) && (
-                <div className="mt-1 flex items-center gap-2 text-[10px]">
-                  <span
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: getToothByFdi(selectedFdi)!.segmentation.color }}
-                  />
-                  <span className="text-indigo-600/70 font-mono">
-                    {getToothByFdi(selectedFdi)!.segmentation.triangleCount} tris
-                  </span>
-                </div>
-              )}
-            </div>
+      {/* Verification progress */}
+      {segmented && summary && (
+        <div className={`rounded-lg border p-3 ${allVerified ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
+          <div className="flex items-center justify-between mb-2">
+            <p className={`text-xs font-semibold ${allVerified ? "text-emerald-800" : "text-amber-800"}`}>
+              {allVerified ? "All teeth verified" : `${summary.verified}/${summary.total} verified`}
+            </p>
             <button
-              onClick={() => selectTooth(null)}
-              className="text-xs text-indigo-500 hover:text-indigo-800 underline"
+              onClick={() => { clearSegmentation(); setSegmented(false); setReassignTarget(null); }}
+              className="text-[10px] text-slate-500 hover:text-slate-700 underline"
             >
-              Clear
+              Reset
             </button>
           </div>
-        ) : (
-          <p className="text-xs text-slate-400 italic text-center py-2">
-            Click a tooth in the viewer to inspect
-          </p>
-        )}
-      </div>
+          <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${allVerified ? "bg-emerald-500" : "bg-amber-500"}`}
+              style={{ width: `${summary.total ? (summary.verified / summary.total) * 100 : 0}%` }}
+            />
+          </div>
+          {summary.auto > 0 && (
+            <p className="text-[10px] text-amber-700 mt-1.5">
+              {summary.auto} unreviewed · {summary.corrected > 0 ? `${summary.corrected} edited · ` : ""}review before advancing
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Mesh info */}
+      {hasSTL && !segmented && (
+        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 space-y-1">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Loaded mesh</p>
+          {upperInfo && <div className="flex justify-between text-[11px]"><span className="text-slate-600 truncate max-w-[140px]">{upperInfo.fileName}</span><span className="text-slate-400">{(upperInfo.triangles / 1000).toFixed(0)}K △</span></div>}
+          {lowerInfo && <div className="flex justify-between text-[11px]"><span className="text-slate-600 truncate max-w-[140px]">{lowerInfo.fileName}</span><span className="text-slate-400">{(lowerInfo.triangles / 1000).toFixed(0)}K △</span></div>}
+        </div>
+      )}
+
+      {/* Correction tools */}
+      {segmented && teeth.length > 0 && (
+        <>
+          {/* Multi-select toolbar */}
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] text-slate-400 flex-1">
+              {selectedArray.length === 0
+                ? "Click rows to select teeth"
+                : `${selectedArray.length} selected`}
+            </p>
+            <button
+              disabled={!canMerge}
+              onClick={() => {
+                mergeTeeth(selectedArray[0], selectedArray[1]);
+              }}
+              title="Merge two selected teeth into one"
+              className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Merge
+            </button>
+            <button
+              disabled
+              title="Split tool — requires boundary editor (coming soon)"
+              className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-400 cursor-not-allowed opacity-40"
+            >
+              Split
+            </button>
+            <button
+              onClick={() => teeth.forEach((t) => verifyTooth(t.fdi))}
+              className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
+            >
+              Verify All
+            </button>
+          </div>
+
+          {/* FDI reassign picker */}
+          {reassignTarget !== null && getToothByFdi(reassignTarget) && (
+            <FdiReassignPicker
+              tooth={getToothByFdi(reassignTarget)!}
+              onClose={() => setReassignTarget(null)}
+            />
+          )}
+
+          {/* Per-tooth list */}
+          <div className="space-y-0.5">
+            <SectionHeader>Teeth ({teeth.length})</SectionHeader>
+            <div className="rounded-lg border border-slate-200 overflow-hidden divide-y divide-slate-100">
+              {sortedTeeth.map((tooth) => {
+                const isSelected = selectedFdis.has(tooth.fdi);
+                const conf = tooth.segmentation.confidence;
+                const confColor = conf >= 0.8 ? "text-emerald-600" : conf >= 0.6 ? "text-amber-600" : "text-red-500";
+                const state = tooth.segmentation.verificationState;
+
+                return (
+                  <div
+                    key={tooth.fdi}
+                    className={`flex items-center gap-2 px-2 py-2 cursor-pointer transition-colors ${
+                      isSelected ? "bg-indigo-50" : "bg-white hover:bg-slate-50"
+                    }`}
+                    onClick={() => toggleTooth(tooth.fdi)}
+                  >
+                    {/* Color swatch */}
+                    <span
+                      className="h-3 w-3 rounded-sm shrink-0"
+                      style={{ backgroundColor: tooth.segmentation.color }}
+                    />
+
+                    {/* FDI + kind */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-800">{tooth.fdi}</span>
+                        <span className="text-[10px] text-slate-400 capitalize">{tooth.kind}</span>
+                        <VerificationBadge state={state} />
+                      </div>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        {/* Confidence bar */}
+                        <div className="h-1 w-12 rounded-full bg-slate-200 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${conf >= 0.8 ? "bg-emerald-400" : conf >= 0.6 ? "bg-amber-400" : "bg-red-400"}`}
+                            style={{ width: `${conf * 100}%` }}
+                          />
+                        </div>
+                        <span className={`text-[10px] font-mono ${confColor}`}>{(conf * 100).toFixed(0)}%</span>
+                        <span className="text-[9px] text-slate-300">·</span>
+                        <span className="text-[10px] text-slate-400">{tooth.segmentation.triangleCount}△</span>
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {state !== "verified" && (
+                        <button
+                          onClick={() => verifyTooth(tooth.fdi)}
+                          title="Mark as verified"
+                          className="h-6 w-6 rounded border border-emerald-200 bg-emerald-50 text-[10px] text-emerald-600 hover:bg-emerald-100 flex items-center justify-center"
+                        >
+                          ✓
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setReassignTarget(reassignTarget === tooth.fdi ? null : tooth.fdi)}
+                        title="Reassign FDI"
+                        className={`h-6 w-6 rounded border text-[10px] flex items-center justify-center transition-colors ${
+                          reassignTarget === tooth.fdi
+                            ? "border-indigo-400 bg-indigo-100 text-indigo-700"
+                            : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                        }`}
+                      >
+                        #
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Quick select for viewer */}
+          <div>
+            <SectionHeader>Viewer selection</SectionHeader>
+            <p className="text-[10px] text-slate-400 mb-1.5">Active in 3D viewer</p>
+            {selectedFdi ? (
+              <div className="flex items-center justify-between rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2">
+                <div>
+                  <p className="text-sm font-bold text-indigo-900">FDI {selectedFdi}</p>
+                  <p className="text-[11px] text-indigo-500 capitalize">{toothKind(selectedFdi)}</p>
+                </div>
+                <button onClick={() => selectTooth(null)} className="text-xs text-indigo-500 hover:text-indigo-800 underline">Clear</button>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic text-center py-2">Click a tooth in the viewer</p>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

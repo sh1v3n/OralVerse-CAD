@@ -132,16 +132,18 @@ export function STLDentalScene() {
         {segmented ? (
           <>
             {/* Segmented Mode: Individual Teeth + Gingiva */}
-            {teeth.map((tooth) => (
-              <ToothMesh
-                key={tooth.id}
-                tooth={tooth}
-                opacity={meshOpacity}
-                wireframe={wireframe}
-                clipPlane={clipPlane}
-                mode={showSegmentationColors ? "segmentation" : "normal"}
-              />
-            ))}
+            {teeth
+              .filter((t) => (t.arch === "upper" && showUpper) || (t.arch === "lower" && showLower))
+              .map((tooth) => (
+                <ToothMesh
+                  key={tooth.id}
+                  tooth={tooth}
+                  opacity={meshOpacity}
+                  wireframe={wireframe}
+                  clipPlane={clipPlane}
+                  mode={showSegmentationColors ? "segmentation" : "normal"}
+                />
+              ))}
             {gingivaUpper && showUpper && (
               <GingivaMesh
                 geometry={gingivaUpper}

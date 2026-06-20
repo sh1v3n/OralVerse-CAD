@@ -71,7 +71,7 @@ export function ToothMesh({
     return "#c8a87a"; // bone/tan default
   }, [mode, isSelected, tooth.segmentation.color]);
 
-  // Material — memoized on preset, mutated for dynamic props
+  // Material — one instance per tooth, all dynamic props mutated in useEffect
   const material = useMemo(() => {
     return new THREE.MeshPhysicalMaterial({
       color: new THREE.Color(displayColor),
@@ -79,27 +79,31 @@ export function ToothMesh({
       metalness: 0.0,
       clearcoat: 0.0,
       envMapIntensity: 0.0,
-      transparent: opacity < 1 || isSelected,
-      opacity,
+      transparent: false,
+      opacity: 1,
       side: THREE.FrontSide,
     });
-  }, [displayColor, mode]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Mutate dynamic properties without recreating material
   useEffect(() => {
     if (!material) return;
     material.color.set(displayColor);
+    material.roughness = mode === "segmentation" ? 0.55 : 0.72;
     material.transparent = opacity < 1;
     material.opacity = opacity;
     material.wireframe = wireframe;
 
-    // Hover glow
-    if (isHovered && !isSelected) {
+    // Hover / selection highlight
+    if (isSelected) {
+      // In segmentation mode: bright white-tinted emissive ring so it pops against the tooth color
+      // In normal mode: the color itself changes to indigo so emissive can be subtle
+      material.emissive.set(mode === "segmentation" ? "#ffffff" : "#4a5fa8");
+      material.emissiveIntensity = mode === "segmentation" ? 0.35 : 0.22;
+    } else if (isHovered) {
       material.emissive.set("#b08850");
       material.emissiveIntensity = 0.25;
-    } else if (isSelected) {
-      material.emissive.set("#4a5fa8");
-      material.emissiveIntensity = 0.2;
     } else {
       material.emissive.setScalar(0);
       material.emissiveIntensity = 0;
@@ -113,7 +117,7 @@ export function ToothMesh({
     }
 
     material.needsUpdate = true;
-  }, [material, displayColor, opacity, wireframe, isHovered, isSelected, clipPlane]);
+  }, [material, displayColor, mode, opacity, wireframe, isHovered, isSelected, clipPlane]);
 
   // ── Interaction handlers ─────────────────────────────────────────────────
 

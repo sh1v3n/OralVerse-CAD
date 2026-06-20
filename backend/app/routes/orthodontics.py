@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import numpy as np
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
@@ -11,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from ai.orthodontics import build_treatment_plan
+from ai.orthodontics.segmentation import DentalMesh, SegmentationResult, get_segmenter
 from ai.orthodontics.staged_planner import build_staged_plan
 from ai.orthodontics.reasoning import answer_with_local_llm
 
@@ -63,6 +65,32 @@ class CopilotInput(BaseModel):
     plan: dict
 
 
+class SegmentPayload(BaseModel):
+    vertices: list[list[float]]  # (N, 3) — vertex positions in mm
+    faces: list[list[int]]       # (M, 3) — face indices into vertices
+    arch: str = Field(pattern="^(upper|lower)$")
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+
+def _result_to_dict(result: SegmentationResult) -> dict:
+    return {
+        "segments": [
+            {
+                "fdi": seg.fdi,
+                "face_mask": np.where(seg.face_mask)[0].tolist(),
+                "confidence": float(seg.confidence),
+                "centroid": seg.centroid.tolist(),
+            }
+            for seg in result.segments
+        ],
+        "gingiva_faces": np.where(result.gingiva_mask)[0].tolist(),
+        "model": result.model,
+        "duration_ms": result.duration_ms,
+    }
+
+
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 
@@ -90,3 +118,21 @@ def generate_plan(model: ModelInput) -> dict:
 @router.post("/copilot")
 def copilot(payload: CopilotInput) -> dict:
     return answer_with_local_llm(payload.question, payload.plan)
+
+
+@router.post("/segment")
+def segment_arch(payload: SegmentPayload) -> dict:
+    """Segment a monolithic arch mesh into individual teeth + gingiva.
+
+    The segmenter implementation is selected by the ORALVERSE_SEGMENTER env var
+    (default: "heuristic").  The caller only needs to send raw vertices and faces
+    and receives per-tooth face indices, FDI labels, and confidence scores.
+    """
+    mesh = DentalMesh(
+        vertices=np.array(payload.vertices, dtype=np.float32),
+        faces=np.array(payload.faces, dtype=np.int32),
+        arch=payload.arch,
+    )
+    segmenter = get_segmenter()
+    result = segmenter.segment(mesh)
+    return _result_to_dict(result)
