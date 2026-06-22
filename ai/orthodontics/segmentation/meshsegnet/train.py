@@ -101,7 +101,12 @@ def main() -> None:
     parser.add_argument("--max_faces",default=16_000, type=int, help="Downsample meshes larger than this")
     args = parser.parse_args()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
     print(f"Device: {device}  |  arch: {args.arch}")
 
     # Dataset
@@ -109,10 +114,11 @@ def main() -> None:
                                 max_faces=args.max_faces, augment=True)
     val_ds   = TeethSegDataset(args.data_dir, split="val",   k_neighbours=args.k,
                                 max_faces=args.max_faces, augment=False)
+    pin = device.type == "cuda"
     train_dl = DataLoader(train_ds, batch_size=1, shuffle=True,
-                          collate_fn=collate_single, num_workers=4, pin_memory=True)
+                          collate_fn=collate_single, num_workers=4, pin_memory=pin)
     val_dl   = DataLoader(val_ds,   batch_size=1, shuffle=False,
-                          collate_fn=collate_single, num_workers=2, pin_memory=True)
+                          collate_fn=collate_single, num_workers=2, pin_memory=pin)
 
     print(f"Train: {len(train_ds)} | Val: {len(val_ds)}")
 
