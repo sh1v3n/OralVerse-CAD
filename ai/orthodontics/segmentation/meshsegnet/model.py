@@ -93,10 +93,12 @@ class MeshSegNet(nn.Module):
         # Combine multi-scale local features
         local_ch = 64 + 128 + 256  # 448
 
-        # Global context MLP (applied after global max-pool)
+        # Global context MLP (applied after global max-pool).
+        # LayerNorm instead of BatchNorm because this receives a single vector
+        # (1, 256) — one global feature per mesh — so batch stats are undefined.
         self.global_mlp = nn.Sequential(
             nn.Linear(local_ch, 256, bias=False),
-            nn.BatchNorm1d(256),
+            nn.LayerNorm(256),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
