@@ -327,6 +327,112 @@ function FdiReassignPicker({
   );
 }
 
+// ── Split picker ──────────────────────────────────────────────────────────────
+
+const SPLIT_AXES = [
+  { axis: "x" as const, label: "Mesial/Distal", hint: "Left ↔ Right along arch" },
+  { axis: "z" as const, label: "Buccal/Lingual", hint: "Front ↔ Back" },
+  { axis: "y" as const, label: "Occlusal/Cervical", hint: "Top ↔ Bottom" },
+];
+
+function SplitPicker({
+  tooth,
+  existingFdis,
+  onClose,
+}: {
+  tooth: ToothObject;
+  existingFdis: Set<number>;
+  onClose: () => void;
+}) {
+  const { splitTooth } = useToothObjectStore();
+  const [axis, setAxis] = useState<"x" | "y" | "z">("x");
+  const [newFdi, setNewFdi] = useState<number>(() => {
+    const upper = ALL_FDI.filter((f) => f < 30 && !existingFdis.has(f));
+    const lower = ALL_FDI.filter((f) => f >= 30 && !existingFdis.has(f));
+    const pool = tooth.arch === "upper" ? upper : lower;
+    return pool[0] ?? tooth.fdi;
+  });
+
+  const available = ALL_FDI.filter(
+    (f) => !existingFdis.has(f) || f === newFdi,
+  );
+  const upper = available.filter((f) => f < 30);
+  const lower = available.filter((f) => f >= 30);
+
+  return (
+    <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-violet-900">Split tooth {tooth.fdi}</p>
+        <button onClick={onClose} className="text-[10px] text-violet-400 hover:text-violet-700">✕</button>
+      </div>
+
+      {/* Axis selector */}
+      <div className="space-y-1">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-violet-500">Cut axis</p>
+        <div className="flex gap-1">
+          {SPLIT_AXES.map(({ axis: a, label, hint }) => (
+            <button
+              key={a}
+              onClick={() => setAxis(a)}
+              title={hint}
+              className={`flex-1 rounded border py-1 text-[9px] font-bold transition-all ${
+                axis === a
+                  ? "border-violet-500 bg-violet-600 text-white"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-violet-50"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[9px] text-violet-400">
+          {SPLIT_AXES.find((s) => s.axis === axis)?.hint}
+        </p>
+      </div>
+
+      {/* New FDI picker */}
+      <div className="space-y-1.5">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-violet-500">New tooth FDI</p>
+        {[upper, lower].map((row, ri) => (
+          <div key={ri} className="flex gap-0.5 justify-center flex-wrap">
+            {(ri === 0 ? [...row].reverse() : row).map((fdi) => (
+              <button
+                key={fdi}
+                onClick={() => setNewFdi(fdi)}
+                className={`h-7 w-6 rounded border text-[9px] font-bold transition-all ${
+                  fdi === newFdi
+                    ? "border-violet-500 bg-violet-600 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-violet-50"
+                }`}
+              >
+                {fdi}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={onClose}
+          className="flex-1 rounded border border-slate-200 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => {
+            splitTooth(tooth.fdi, axis, newFdi);
+            onClose();
+          }}
+          className="flex-1 rounded bg-violet-600 py-1.5 text-xs font-semibold text-white hover:bg-violet-700"
+        >
+          Split → {tooth.fdi} + {newFdi}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── SegmentationPanel ─────────────────────────────────────────────────────────
 
 export function SegmentationPanel() {
@@ -340,14 +446,28 @@ export function SegmentationPanel() {
   const {
     setSegmentedTeeth, setGingiva, clearSegmentation,
     getToothByFdi, teeth, selectedFdis, toggleTooth,
-    mergeTeeth, verifyTooth, setVerificationState,
+    mergeTeeth, splitTooth, verifyTooth, setVerificationState,
     getVerificationSummary, setShowSegmentationColors,
+    previousTeeth, undo,
   } = useToothObjectStore();
   const hasSTL = upperInfo !== null || lowerInfo !== null;
 
   const [isSegmenting, setIsSegmenting] = useState(false);
   const [segmentError, setSegmentError] = useState<string | null>(null);
   const [reassignTarget, setReassignTarget] = useState<number | null>(null);
+  const [splitTarget, setSplitTarget] = useState<number | null>(null);
+
+  // Ctrl/Cmd+Z undo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && previousTeeth) {
+        e.preventDefault();
+        undo();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [previousTeeth, undo]);
 
   const handleRunSegmentation = async () => {
     if (!upperArch && !lowerArch) return;
@@ -390,6 +510,7 @@ export function SegmentationPanel() {
 
   const selectedArray = Array.from(selectedFdis);
   const canMerge = selectedArray.length === 2;
+  const canSplit = selectedArray.length === 1;
   const summary = segmented ? getVerificationSummary() : null;
   const allVerified = summary ? summary.auto === 0 && summary.corrected === 0 : false;
 
@@ -476,20 +597,39 @@ export function SegmentationPanel() {
                 ? "Click rows to select teeth"
                 : `${selectedArray.length} selected`}
             </p>
+            {previousTeeth && (
+              <button
+                onClick={() => undo()}
+                title="Undo last correction (⌘Z)"
+                className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-500 hover:bg-slate-50 transition-colors"
+              >
+                ↩ Undo
+              </button>
+            )}
             <button
               disabled={!canMerge}
-              onClick={() => {
-                mergeTeeth(selectedArray[0], selectedArray[1]);
-              }}
+              onClick={() => mergeTeeth(selectedArray[0], selectedArray[1])}
               title="Merge two selected teeth into one"
               className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               Merge
             </button>
             <button
-              disabled
-              title="Split tool — requires boundary editor (coming soon)"
-              className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-400 cursor-not-allowed opacity-40"
+              disabled={!canSplit}
+              onClick={() => {
+                if (canSplit) {
+                  setReassignTarget(null);
+                  setSplitTarget(splitTarget === selectedArray[0] ? null : selectedArray[0]);
+                }
+              }}
+              title={canSplit ? "Split selected tooth at midplane" : "Select exactly 1 tooth to split"}
+              className={`rounded border px-2 py-1 text-[10px] font-semibold transition-colors ${
+                splitTarget !== null
+                  ? "border-violet-400 bg-violet-100 text-violet-700"
+                  : canSplit
+                  ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  : "border-slate-200 bg-white text-slate-400 opacity-40 cursor-not-allowed"
+              }`}
             >
               Split
             </button>
@@ -506,6 +646,15 @@ export function SegmentationPanel() {
             <FdiReassignPicker
               tooth={getToothByFdi(reassignTarget)!}
               onClose={() => setReassignTarget(null)}
+            />
+          )}
+
+          {/* Split picker */}
+          {splitTarget !== null && getToothByFdi(splitTarget) && (
+            <SplitPicker
+              tooth={getToothByFdi(splitTarget)!}
+              existingFdis={new Set(teeth.map((t) => t.fdi))}
+              onClose={() => setSplitTarget(null)}
             />
           )}
 
@@ -566,7 +715,7 @@ export function SegmentationPanel() {
                         </button>
                       )}
                       <button
-                        onClick={() => setReassignTarget(reassignTarget === tooth.fdi ? null : tooth.fdi)}
+                        onClick={() => { setSplitTarget(null); setReassignTarget(reassignTarget === tooth.fdi ? null : tooth.fdi); }}
                         title="Reassign FDI"
                         className={`h-6 w-6 rounded border text-[10px] flex items-center justify-center transition-colors ${
                           reassignTarget === tooth.fdi
