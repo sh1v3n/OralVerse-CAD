@@ -215,6 +215,18 @@ def load_labels(json_path: Path) -> np.ndarray:
     raise ValueError(f"Cannot parse label format in {json_path}")
 
 
+def _vertex_to_face_labels(vertex_labels: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    """Convert per-vertex labels to per-face via majority vote (O(F), no scipy)."""
+    v0 = vertex_labels[faces[:, 0]]
+    v1 = vertex_labels[faces[:, 1]]
+    v2 = vertex_labels[faces[:, 2]]
+    face_labels = v0.copy()
+    # Where v1 == v2 and they differ from v0, the majority is v1/v2
+    mask = (v1 == v2) & (v1 != v0)
+    face_labels[mask] = v1[mask]
+    return face_labels
+
+
 def fdi_to_class(fdi_labels: np.ndarray, arch: str) -> np.ndarray:
     """Map FDI integers to class indices 0-16."""
     mapping = UPPER_FDI_TO_CLS if arch == "upper" else LOWER_FDI_TO_CLS
@@ -275,9 +287,21 @@ def process_scan(
             mesh = tm.util.concatenate(mesh.dump())
 
         fdi_labels = load_labels(json_path)
+        n_labels = len(fdi_labels)
+        n_faces  = len(mesh.faces)
+        n_verts  = len(mesh.vertices)
 
-        if len(fdi_labels) != len(mesh.faces):
-            print(f"  [skip] {obj_path.name}: label count {len(fdi_labels)} != face count {len(mesh.faces)}")
+        if n_labels == n_faces:
+            pass  # per-face labels (3DTeethSeg22 format)
+        elif n_labels == n_verts:
+            # Teeth3DS+ stores per-vertex labels; convert to per-face via majority vote
+            fdi_labels = _vertex_to_face_labels(fdi_labels, mesh.faces)
+        elif n_labels * 2 == n_faces:
+            # Quad mesh triangulated on load; one label per original quad
+            fdi_labels = np.repeat(fdi_labels, 2)
+        else:
+            print(f"  [skip] {obj_path.name}: label count {n_labels} != "
+                  f"face count {n_faces} or vertex count {n_verts}")
             return False
 
         features   = compute_features(mesh)
