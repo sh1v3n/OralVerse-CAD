@@ -70,6 +70,63 @@ IN_FEATURES  = 9
 K_NEIGHBOURS = 6
 
 
+def _filter_components(cls_labels: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    """Keep only the largest connected component per tooth class.
+
+    Isolated face patches that don't connect to the main tooth body are
+    relabeled as gingiva (0), cleaning up fragmented segmentation output.
+    """
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    F = len(faces)
+    result = cls_labels.copy()
+
+    # Build face adjacency: faces sharing an edge are neighbors.
+    v0, v1, v2 = faces[:, 0], faces[:, 1], faces[:, 2]
+    face_ids = np.arange(F)
+
+    all_edges = np.concatenate([
+        np.stack([np.minimum(v0, v1), np.maximum(v0, v1), face_ids], axis=1),
+        np.stack([np.minimum(v1, v2), np.maximum(v1, v2), face_ids], axis=1),
+        np.stack([np.minimum(v2, v0), np.maximum(v2, v0), face_ids], axis=1),
+    ], axis=0)  # (3F, 3)
+
+    order = np.lexsort((all_edges[:, 1], all_edges[:, 0]))
+    s = all_edges[order]
+
+    same = (s[:-1, 0] == s[1:, 0]) & (s[:-1, 1] == s[1:, 1])
+    idx = np.where(same)[0]
+    fi = s[idx, 2].astype(np.int32)
+    fj = s[idx + 1, 2].astype(np.int32)
+
+    adj = csr_matrix(
+        (np.ones(len(fi) * 2, dtype=np.float32), (np.r_[fi, fj], np.r_[fj, fi])),
+        shape=(F, F),
+    )
+
+    for cls in np.unique(cls_labels):
+        if cls == 0:
+            continue
+        face_idx = np.where(cls_labels == cls)[0]
+        if len(face_idx) < 2:
+            result[face_idx] = 0
+            continue
+
+        sub = adj[face_idx][:, face_idx]
+        n_comp, comp_labels = connected_components(sub, directed=False)
+        if n_comp <= 1:
+            continue
+
+        sizes = np.bincount(comp_labels, minlength=n_comp)
+        largest = sizes.argmax()
+        for c in range(n_comp):
+            if c != largest:
+                result[face_idx[comp_labels == c]] = 0
+
+    return result
+
+
 class MeshSegNetSegmenter:
     MODEL_ID = "meshsegnet-v1"
 
@@ -150,6 +207,7 @@ class MeshSegNetSegmenter:
 
         probs      = torch.softmax(logits, dim=-1).cpu().numpy()
         cls_labels = probs.argmax(axis=-1)
+        cls_labels = _filter_components(cls_labels, mesh.faces)
 
         cls_to_fdi  = _UPPER_CLS_TO_FDI if arch == "upper" else _LOWER_CLS_TO_FDI
         gingiva_mask = cls_labels == 0
