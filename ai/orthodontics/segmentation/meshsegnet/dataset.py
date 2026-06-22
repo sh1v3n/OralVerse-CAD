@@ -59,7 +59,7 @@ class TeethSegDataset(Dataset):
         path = self.files[idx]
         npz = np.load(path, allow_pickle=False)
 
-        features = npz["features"].astype(np.float32)  # (F, 9)
+        features = np.nan_to_num(npz["features"].astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
         labels   = npz["labels"].astype(np.int64)       # (F,)
 
         # Optional downsampling for very large meshes (memory/speed)
@@ -102,18 +102,14 @@ def _augment(features: np.ndarray) -> np.ndarray:
 # ── kNN index ─────────────────────────────────────────────────────────────────
 
 def _build_knn(centroids: np.ndarray, k: int) -> np.ndarray:
-    """Return (F, k) int64 array of k nearest neighbour indices.
+    """Return (F, k) int64 array of k nearest neighbour indices via KDTree.
 
-    Uses a simple O(F²) approach — fast enough for F ≤ 16k.
-    Replace with a KD-tree for larger meshes.
+    O(F log F) — replaces the O(F²) pairwise distance approach which
+    allocated a (F, F, 3) array and was the training bottleneck.
     """
-    F = len(centroids)
-    # Pairwise squared distances
-    diff = centroids[:, None, :] - centroids[None, :, :]  # (F, F, 3)
-    dist2 = (diff ** 2).sum(axis=-1)                       # (F, F)
-    # argsort, skip self (index 0 is always self)
-    sorted_idx = np.argsort(dist2, axis=1)[:, 1 : k + 1]  # (F, k)
-    return sorted_idx.astype(np.int64)
+    from scipy.spatial import KDTree
+    _, idx = KDTree(centroids).query(centroids, k=k + 1)  # k+1 includes self
+    return idx[:, 1:].astype(np.int64)  # (F, k) — drop self at column 0
 
 
 # ── Collate ───────────────────────────────────────────────────────────────────

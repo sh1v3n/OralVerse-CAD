@@ -120,6 +120,7 @@ def compute_features(mesh) -> np.ndarray:
     kappas = _face_curvatures(mesh)  # (F, 2)
 
     features = np.concatenate([centroids_norm, normals, log_area, kappas], axis=1)
+    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
     assert features.shape == (F, 9), features.shape
     return features.astype(np.float32)
 
