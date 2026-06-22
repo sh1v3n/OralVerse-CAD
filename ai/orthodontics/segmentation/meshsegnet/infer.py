@@ -74,6 +74,8 @@ class MeshSegNetSegmenter:
     MODEL_ID = "meshsegnet-v1"
 
     def __init__(self, weights_path: str | Path) -> None:
+        """Accept either a single .pt file or a directory containing
+        meshsegnet_upper_best.pt / meshsegnet_lower_best.pt."""
         _load_deps()
 
         torch = _torch
@@ -84,18 +86,38 @@ class MeshSegNetSegmenter:
         else:
             self.device = torch.device("cpu")
 
-        ckpt = torch.load(weights_path, map_location=self.device, weights_only=True)
+        path = Path(weights_path)
+        self._models: dict[str, object] = {}
+        self._k:      dict[str, int]    = {}
 
-        self.model = _MeshSegNet(
+        if path.is_dir():
+            for arch in ("upper", "lower"):
+                candidate = path / f"meshsegnet_{arch}_best.pt"
+                if candidate.exists():
+                    model, k = self._load_ckpt(candidate)
+                    self._models[arch] = model
+                    self._k[arch]      = k
+        else:
+            model, k = self._load_ckpt(path)
+            ckpt = torch.load(path, map_location=self.device, weights_only=True)
+            arch = ckpt.get("arch", "upper")
+            self._models[arch] = model
+            self._k[arch]      = k
+
+        if not self._models:
+            raise FileNotFoundError(f"No valid checkpoint found at {weights_path}")
+
+    def _load_ckpt(self, path: Path) -> tuple:
+        torch = _torch
+        ckpt  = torch.load(path, map_location=self.device, weights_only=True)
+        model = _MeshSegNet(
             in_features=ckpt.get("in_features", IN_FEATURES),
             num_classes=ckpt.get("num_classes", _NUM_CLASSES),
             k=ckpt.get("k", K_NEIGHBOURS),
         ).to(self.device)
-        self.model.load_state_dict(ckpt["state_dict"])
-        self.model.eval()
-
-        self.k               = ckpt.get("k", K_NEIGHBOURS)
-        self.arch_from_ckpt  = ckpt.get("arch", "upper")
+        model.load_state_dict(ckpt["state_dict"])
+        model.eval()
+        return model, ckpt.get("k", K_NEIGHBOURS)
 
     def segment(self, mesh: DentalMesh) -> SegmentationResult:
         t0 = time.monotonic()
@@ -106,26 +128,30 @@ class MeshSegNetSegmenter:
         if M == 0:
             return SegmentationResult([], np.zeros(0, dtype=bool), self.MODEL_ID, 0.0)
 
+        arch  = getattr(mesh, "arch", "upper")
+        model = self._models.get(arch) or next(iter(self._models.values()))
+        k     = self._k.get(arch)     or next(iter(self._k.values()))
+
         tri = tm.Trimesh(
             vertices=mesh.vertices,
             faces=mesh.faces,
             process=False,
         )
 
-        features_np = _compute_features(tri)
-        knn_np      = _build_knn(features_np[:, :3], self.k).astype(np.int64)
+        features_np = np.nan_to_num(_compute_features(tri), nan=0.0, posinf=0.0, neginf=0.0)
+        knn_np      = _build_knn(features_np[:, :3], k).astype(np.int64)
 
         torch = _torch
         features_t = torch.from_numpy(features_np).to(self.device)
         knn_t      = torch.from_numpy(knn_np).to(self.device)
 
         with torch.no_grad():
-            logits = self.model(features_t, knn_t)
+            logits = model(features_t, knn_t)
 
         probs      = torch.softmax(logits, dim=-1).cpu().numpy()
         cls_labels = probs.argmax(axis=-1)
 
-        cls_to_fdi  = _UPPER_CLS_TO_FDI if mesh.arch == "upper" else _LOWER_CLS_TO_FDI
+        cls_to_fdi  = _UPPER_CLS_TO_FDI if arch == "upper" else _LOWER_CLS_TO_FDI
         gingiva_mask = cls_labels == 0
 
         all_centroids = (

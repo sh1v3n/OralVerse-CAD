@@ -19,9 +19,15 @@ def get_segmenter() -> Segmenter:
     if name == "heuristic":
         return HeuristicSegmenter()
     if name == "meshsegnet":
-        weights = os.environ.get("MESHSEGNET_WEIGHTS")
+        weights = (
+            os.environ.get("MESHSEGNET_CHECKPOINT_DIR")
+            or os.environ.get("MESHSEGNET_WEIGHTS")
+        )
         if not weights:
-            raise ValueError("Set MESHSEGNET_WEIGHTS=/path/to/meshsegnet_upper_best.pt")
+            raise ValueError(
+                "Set MESHSEGNET_CHECKPOINT_DIR=/path/to/checkpoints/  "
+                "(or MESHSEGNET_WEIGHTS=/path/to/single_arch.pt)"
+            )
         from .meshsegnet import MeshSegNetSegmenter
         return MeshSegNetSegmenter(weights)
     raise ValueError(f"Unknown segmenter: {name!r}.  Set {_SEGMENTER_ENV_KEY}=heuristic or meshsegnet.")
