@@ -31,7 +31,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -123,19 +125,14 @@ def compute_features(mesh) -> np.ndarray:
 
 
 def _face_curvatures(mesh) -> np.ndarray:
-    """Estimate two principal curvatures per face via angle-deficit method.
+    """Estimate two principal curvatures per face (fully vectorized, no Python loops).
 
-    kappa1 = H + sqrt(max(H^2 - K, 0))
-    kappa2 = H - sqrt(max(H^2 - K, 0))
+    Uses cotangent Laplacian for mean curvature H and angle-deficit for Gaussian
+    curvature K, then kappa1/2 = H ± sqrt(max(H²-K, 0)).
     """
     V = len(mesh.vertices)
-    F = len(mesh.faces)
-
-    verts = mesh.vertices
+    verts = mesh.vertices.astype(np.float64)
     faces = mesh.faces
-
-    mixed_area   = np.zeros(V, dtype=np.float64)
-    angle_defect = np.full(V, 2.0 * np.pi, dtype=np.float64)
 
     v0 = verts[faces[:, 0]]
     v1 = verts[faces[:, 1]]
@@ -145,44 +142,51 @@ def _face_curvatures(mesh) -> np.ndarray:
     e12 = v2 - v1
     e20 = v0 - v2
 
-    cross      = np.cross(e01, -e20)
-    face_areas = np.linalg.norm(cross, axis=1) / 2.0
+    face_areas = np.linalg.norm(np.cross(e01, -e20), axis=1) / 2.0
+    third_area = face_areas / 3.0
 
-    def _angle(a, b):
+    def _safe_angle(a, b):
         cos_t = np.clip(
             (a * b).sum(axis=1) / (np.linalg.norm(a, axis=1) * np.linalg.norm(b, axis=1) + 1e-12),
             -1.0, 1.0,
         )
         return np.arccos(cos_t)
 
-    ang0 = _angle(e01, -e20)
-    ang1 = _angle(e12, -e01)
-    ang2 = _angle(e20, -e12)
+    ang0 = _safe_angle(e01, -e20)
+    ang1 = _safe_angle(e12, -e01)
+    ang2 = _safe_angle(e20, -e12)
 
-    np.add.at(mixed_area, faces[:, 0], face_areas / 3.0)
-    np.add.at(mixed_area, faces[:, 1], face_areas / 3.0)
-    np.add.at(mixed_area, faces[:, 2], face_areas / 3.0)
-
-    np.subtract.at(angle_defect, faces[:, 0], ang0)
-    np.subtract.at(angle_defect, faces[:, 1], ang1)
-    np.subtract.at(angle_defect, faces[:, 2], ang2)
+    # bincount is C-level O(n) — replaces np.add.at for large meshes
+    mixed_area = (
+        np.bincount(faces[:, 0], weights=third_area, minlength=V)
+        + np.bincount(faces[:, 1], weights=third_area, minlength=V)
+        + np.bincount(faces[:, 2], weights=third_area, minlength=V)
+    )
+    angle_defect = np.full(V, 2.0 * np.pi, dtype=np.float64)
+    angle_defect -= np.bincount(faces[:, 0], weights=ang0, minlength=V)
+    angle_defect -= np.bincount(faces[:, 1], weights=ang1, minlength=V)
+    angle_defect -= np.bincount(faces[:, 2], weights=ang2, minlength=V)
 
     K_vert = np.zeros(V, dtype=np.float64)
     safe = mixed_area > 1e-12
     K_vert[safe] = angle_defect[safe] / mixed_area[safe]
 
+    # Cotangent Laplacian — vectorized over all faces, 3 permutations
     laplacian = np.zeros((V, 3), dtype=np.float64)
     weights   = np.zeros(V, dtype=np.float64)
-    for fi in range(F):
-        for a, b, c in [(0, 1, 2), (1, 2, 0), (2, 0, 1)]:
-            vi = faces[fi, a]
-            vj = faces[fi, b]
-            vk = faces[fi, c]
-            ea = verts[vi] - verts[vk]
-            eb = verts[vj] - verts[vk]
-            cot = (ea * eb).sum() / (np.linalg.norm(np.cross(ea, eb)) + 1e-12)
-            laplacian[vi] += cot * (verts[vj] - verts[vi])
-            weights[vi]   += cot
+
+    for ai, bi, ci in ((0, 1, 2), (1, 2, 0), (2, 0, 1)):
+        vi_idx = faces[:, ai]
+        vi_pos = verts[vi_idx]
+        vj_pos = verts[faces[:, bi]]
+        vk_pos = verts[faces[:, ci]]
+        ea  = vi_pos - vk_pos
+        eb  = vj_pos - vk_pos
+        cot = (ea * eb).sum(axis=1) / (np.linalg.norm(np.cross(ea, eb), axis=1) + 1e-12)
+        weights += np.bincount(vi_idx, weights=cot, minlength=V)
+        contrib  = cot[:, np.newaxis] * (vj_pos - vi_pos)
+        for dim in range(3):
+            laplacian[:, dim] += np.bincount(vi_idx, weights=contrib[:, dim], minlength=V)
 
     safe_v = weights > 1e-12
     laplacian[safe_v] /= 2.0 * mixed_area[safe_v, np.newaxis]
@@ -323,6 +327,13 @@ def process_scan(
         return False
 
 
+def _process_scan_worker(args: tuple) -> tuple[bool, str, str]:
+    """Top-level wrapper so ProcessPoolExecutor can pickle it."""
+    obj_path, json_path, arch, out_dir = args
+    ok = process_scan(Path(obj_path), Path(json_path), arch, Path(out_dir))
+    return ok, arch, Path(obj_path).stem
+
+
 # ── Splits ─────────────────────────────────────────────────────────────────────
 
 def write_splits(
@@ -382,26 +393,36 @@ def main() -> None:
                         help="Output directory for .npz files (default: ./data)")
     parser.add_argument("--train_frac", default=0.80, type=float)
     parser.add_argument("--val_frac",   default=0.10, type=float)
+    parser.add_argument("--workers", default=0, type=int,
+                        help="Parallel worker processes (0 = auto = CPU count)")
     args = parser.parse_args()
 
-    # trimesh check — friendly message if missing
     _require_trimesh()
 
     pairs = find_scan_pairs(args.data_dir)
     if not pairs:
         sys.exit(f"No .obj + .json pairs found under {args.data_dir}")
 
-    print(f"Found {len(pairs)} scans  |  output -> {args.out_dir}\n")
+    n_workers = args.workers or os.cpu_count() or 1
+    print(f"Found {len(pairs)} scans  |  output -> {args.out_dir}  |  workers: {n_workers}\n")
 
     ok, fail = 0, 0
     processed: list[tuple[str, str]] = []
 
-    for obj_path, json_path, arch in tqdm(pairs, desc="Processing"):
-        if process_scan(obj_path, json_path, arch, args.out_dir):
-            ok += 1
-            processed.append((arch, obj_path.stem))
-        else:
-            fail += 1
+    work = [
+        (str(obj), str(json_), arch, str(args.out_dir))
+        for obj, json_, arch in pairs
+    ]
+
+    with ProcessPoolExecutor(max_workers=n_workers) as pool:
+        futures = {pool.submit(_process_scan_worker, item): item for item in work}
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Processing"):
+            success, arch, stem = future.result()
+            if success:
+                ok += 1
+                processed.append((arch, stem))
+            else:
+                fail += 1
 
     print(f"\nDone: {ok} ok, {fail} failed")
 
