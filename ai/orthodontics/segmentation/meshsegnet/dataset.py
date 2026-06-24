@@ -106,10 +106,20 @@ def _build_knn(centroids: np.ndarray, k: int) -> np.ndarray:
 
     O(F log F) — replaces the O(F²) pairwise distance approach which
     allocated a (F, F, 3) array and was the training bottleneck.
+    When F < k+1, neighbors are tiled from whatever points exist.
     """
     from scipy.spatial import KDTree
-    _, idx = KDTree(centroids).query(centroids, k=k + 1)  # k+1 includes self
-    return idx[:, 1:].astype(np.int64)  # (F, k) — drop self at column 0
+    F = len(centroids)
+    k_eff = min(k, F - 1) if F > 1 else 0
+    if k_eff == 0:
+        return np.zeros((F, k), dtype=np.int64)
+    _, idx = KDTree(centroids).query(centroids, k=k_eff + 1)  # k_eff+1 includes self
+    neighbors = idx[:, 1:].astype(np.int64)  # (F, k_eff)
+    if k_eff < k:
+        # tile columns to reach exactly k
+        repeats = (k + k_eff - 1) // k_eff
+        neighbors = np.tile(neighbors, repeats)[:, :k]
+    return neighbors
 
 
 # ── Collate ───────────────────────────────────────────────────────────────────
