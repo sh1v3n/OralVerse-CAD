@@ -1,263 +1,341 @@
-"use client";
+import Link from "next/link";
 
-import { useEffect } from "react";
-import { TreatmentViewer } from "@/components/treatment/TreatmentViewer";
-import { useTreatmentStore } from "@/lib/store";
-import { useCaseStore } from "@/lib/caseStore";
-import type { WorkflowStage } from "@/lib/store";
-import { CaseListSidebar } from "@/components/panels/CaseListSidebar";
-import {
-  PreprocessingPanel,
-  SegmentationPanel,
-  InitialPositionPanel,
-  TreatmentPlanPanel,
-  FinalPositionPanel,
-  StagingPanel,
-  AttachmentsPanel,
-  ReviewPanel,
-} from "@/components/panels/WorkflowPanels";
+const MONO = "var(--font-ibm-mono, 'IBM Plex Mono', monospace)";
+const SANS = "var(--font-hanken, 'Hanken Grotesk', system-ui, sans-serif)";
 
-// ─── Workflow config ───────────────────────────────────────────────────────────
-
-const WORKFLOW_STAGES: { id: WorkflowStage; label: string; short: string }[] = [
-  { id: "preprocessing",    label: "Preprocessing",      short: "Pre"   },
-  { id: "segmentation",     label: "Segmentation",       short: "Seg"   },
-  { id: "initial_position", label: "Initial Position",   short: "Init"  },
-  { id: "treatment_plan",   label: "Treatment Plan",     short: "Treat" },
-  { id: "final_position",   label: "Final Position",     short: "Final" },
-  { id: "staging",          label: "Staging",            short: "Stage" },
-  { id: "attachments",      label: "Attachments",        short: "Att"   },
-  { id: "review",           label: "Review & Export",    short: "Review"},
-];
-
-function stageIndex(id: WorkflowStage) {
-  return WORKFLOW_STAGES.findIndex((s) => s.id === id);
-}
-
-// ─── Per-stage panel router ────────────────────────────────────────────────────
-
-function StagePanel({ stage }: { stage: WorkflowStage }) {
-  switch (stage) {
-    case "preprocessing":    return <PreprocessingPanel />;
-    case "segmentation":     return <SegmentationPanel />;
-    case "initial_position": return <InitialPositionPanel />;
-    case "treatment_plan":   return <TreatmentPlanPanel />;
-    case "final_position":   return <FinalPositionPanel />;
-    case "staging":          return <StagingPanel />;
-    case "attachments":      return <AttachmentsPanel />;
-    case "review":           return <ReviewPanel />;
-  }
-}
-
-// ─── Empty-state — no case selected ──────────────────────────────────────────
-
-function NoPatientSelected() {
+export default function LandingPage() {
   return (
-    <div className="flex flex-1 items-center justify-center overflow-hidden bg-[#f0eeeb]">
-      <div className="text-center max-w-sm px-6">
-        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm border border-stone-200">
-          <svg className="h-8 w-8 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-        </div>
-        <h2 className="text-base font-semibold text-stone-700 mb-1">No Patient Selected</h2>
-        <p className="text-sm text-stone-400 leading-relaxed">
-          Select or create a new patient from the sidebar, then link a dataset to begin the orthodontic workflow.
-        </p>
+    <main
+      style={{
+        position: "relative",
+        minHeight: "100vh",
+        width: "100%",
+        background:
+          "radial-gradient(120% 90% at 50% 18%, #F6F2EB 0%, #EFE9DF 46%, #E6DECF 100%)",
+        color: "#1C1A16",
+        fontFamily: SANS,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* film grain */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 6,
+          mixBlendMode: "multiply",
+          opacity: 0.05,
+          backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")`,
+        }}
+      />
+
+      {/* corner registration marks */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 26,
+          pointerEvents: "none",
+          zIndex: 4,
+          color: "rgba(28,26,22,0.28)",
+          fontFamily: MONO,
+        }}
+      >
+        <span style={{ position: "absolute", top: 0, left: 0, fontSize: 16, lineHeight: 1 }}>+</span>
+        <span style={{ position: "absolute", top: 0, right: 0, fontSize: 16, lineHeight: 1 }}>+</span>
+        <span style={{ position: "absolute", bottom: 0, left: 0, fontSize: 16, lineHeight: 1 }}>+</span>
+        <span style={{ position: "absolute", bottom: 0, right: 0, fontSize: 16, lineHeight: 1 }}>+</span>
       </div>
-    </div>
-  );
-}
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+      {/* NAV */}
+      <nav
+        style={{
+          position: "relative",
+          zIndex: 5,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 24,
+          padding: "26px clamp(24px,5vw,64px)",
+        }}
+      >
+        {/* Logo */}
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <span style={{ fontSize: 21, fontWeight: 700, letterSpacing: "-0.03em" }}>
+            OralVerse
+          </span>
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 10.5,
+              letterSpacing: "0.16em",
+              color: "#8C8576",
+              textTransform: "uppercase",
+            }}
+          >
+            AI&nbsp;Orthodontic&nbsp;CAD
+          </span>
+        </div>
 
-export default function Home() {
-  const {
-    patients,
-    cases,
-    activeCaseId,
-    activeCase,
-    activeRecord,
-    setWorkflowStage,
-    advanceWorkflow,
-    rejectWorkflow,
-    setApprovalStatus,
-  } = useCaseStore();
+        {/* Nav links */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 34,
+            fontSize: 14.5,
+            color: "#46413A",
+          }}
+        >
+          {["Platform", "Workflow", "Clinics", "Pricing"].map((label) => (
+            <a key={label} href="#" style={{ opacity: 0.85, textDecoration: "none", color: "inherit" }}>
+              {label}
+            </a>
+          ))}
+        </div>
 
-  // Mirror active record's workflow stage into the treatment store (viewer needs it)
-  const record = activeRecord();
-  const theCase = activeCase();
-  const patient = patients.find((p) => p.id === theCase?.patientId);
+        {/* Auth CTAs */}
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          <Link
+            href="/sign-in"
+            style={{ fontSize: 14.5, color: "#46413A", opacity: 0.85, textDecoration: "none" }}
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/sign-up"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "11px 20px",
+              borderRadius: 999,
+              background: "#1C1A16",
+              color: "#F2EEE7",
+              fontSize: 14,
+              fontWeight: 500,
+              boxShadow:
+                "0 1px 0 rgba(255,255,255,0.18) inset, 0 6px 18px rgba(28,26,22,0.18)",
+              textDecoration: "none",
+            }}
+          >
+            Sign up
+          </Link>
+        </div>
+      </nav>
 
-  // Keep TreatmentStore.workflowStage in sync with CaseStore record
-  const { setWorkflowStage: setTreatmentWorkflow } = useTreatmentStore();
-  useEffect(() => {
-    if (record?.workflowStage) setTreatmentWorkflow(record.workflowStage);
-  }, [record?.workflowStage, setTreatmentWorkflow]);
+      {/* HERO */}
+      <section
+        style={{
+          position: "relative",
+          zIndex: 3,
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          textAlign: "center",
+          padding: "18px clamp(20px,5vw,64px) 56px",
+        }}
+      >
+        {/* Headline */}
+        <div style={{ animation: "arc-rise 0.7s ease both" }}>
+          <p
+            style={{
+              margin: "0 0 22px",
+              fontFamily: MONO,
+              fontSize: 12,
+              letterSpacing: "0.26em",
+              textTransform: "uppercase",
+              color: "#8C8576",
+            }}
+          >
+            For Orthodontists &amp; Dentists
+          </p>
+          <h1
+            style={{
+              margin: 0,
+              fontWeight: 600,
+              letterSpacing: "-0.035em",
+              lineHeight: 0.98,
+              fontSize: "clamp(2.6rem,7vw,5.4rem)",
+              color: "#1C1A16",
+            }}
+          >
+            Every aligner,
+            <br />
+            planned to the micron.
+          </h1>
+        </div>
 
-  const hasActiveCase = activeCaseId !== null && theCase !== undefined;
-  const currentStageId: WorkflowStage = record?.workflowStage ?? "preprocessing";
-  const currentIdx = stageIndex(currentStageId);
-  const isFirst = currentIdx === 0;
-  const isLast = currentIdx === WORKFLOW_STAGES.length - 1;
-
-  return (
-    <main className="flex h-screen w-full flex-col bg-stone-100 text-slate-800 font-sans overflow-hidden">
-
-      {/* ── Top header ─────────────────────────────────────────────────────── */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-stone-200 bg-white px-4 shadow-sm z-20">
-
-        {/* Patient info */}
-        <div className="flex items-center gap-3 min-w-[220px]">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white text-[10px] font-black shrink-0">
-            OV
+        {/* 3D centerpiece */}
+        <div
+          style={{
+            position: "relative",
+            margin: "clamp(14px,3vh,34px) 0 clamp(20px,3vh,36px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {/* studio glow */}
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              width: "min(720px,86vw)",
+              height: "min(560px,52vh)",
+              borderRadius: "50%",
+              background:
+                "radial-gradient(closest-side, #FFFFFF 0%, rgba(255,255,255,0.6) 38%, rgba(255,255,255,0) 72%)",
+              filter: "blur(6px)",
+              animation: "arc-glow 9s ease-in-out infinite",
+              zIndex: 0,
+            }}
+          />
+          {/* ground shadow */}
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              bottom: "-6%",
+              width: "min(420px,60vw)",
+              height: 42,
+              borderRadius: "50%",
+              background:
+                "radial-gradient(closest-side, rgba(28,26,22,0.28), rgba(28,26,22,0))",
+              filter: "blur(7px)",
+              zIndex: 0,
+            }}
+          />
+          {/* Sketchfab iframe */}
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <iframe
+              title="Dental Aligner — live 3D"
+              src="https://sketchfab.com/models/7076c62b5bcb455eb146990265d2e072/embed?autospin=0.4&autostart=1&preload=1&transparent=1&dnt=1&ui_infos=0&ui_controls=0&ui_stop=0&ui_inspector=0&ui_watermark=0&ui_watermark_link=0&ui_ar=0&ui_help=0&ui_settings=0&ui_vr=0&ui_fullscreen=0&ui_annotations=0&ui_loading=0&ui_hint=0"
+              allow="autoplay; fullscreen; xr-spatial-tracking"
+              allowFullScreen
+              style={{
+                display: "block",
+                width: "min(660px,84vw)",
+                height: "min(480px,52vh)",
+                background: "transparent",
+                borderRadius: 20,
+                border: 0,
+              }}
+            />
           </div>
-          {hasActiveCase ? (
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-900 truncate leading-tight">
-                {patient?.name ?? "Unknown Patient"}
-              </p>
-              <p className="text-[10px] text-slate-400 truncate">
-                {theCase?.datasetLabel ? `Dataset: ${theCase.datasetLabel} · ` : ""}{record?.label ?? "No Plan"}
-              </p>
-            </div>
-          ) : (
-            <span className="text-sm font-medium text-stone-400">OralVerse CAD</span>
-          )}
+          {/* caption */}
+          <span
+            style={{
+              position: "absolute",
+              bottom: -30,
+              left: "50%",
+              transform: "translateX(-50%)",
+              fontFamily: MONO,
+              fontSize: 10.5,
+              letterSpacing: "0.18em",
+              color: "#A39B8B",
+              whiteSpace: "nowrap",
+            }}
+          >
+            LIVE 3D — DRAG TO ROTATE
+          </span>
         </div>
 
-        {/* Workflow stepper — only shown when a case is active */}
-        <div className="flex flex-1 items-center justify-center gap-0 px-4 overflow-x-auto">
-          {hasActiveCase && WORKFLOW_STAGES.map((stage, index) => {
-            const isActive = stage.id === currentStageId;
-            const isPast = currentIdx > index;
-            return (
-              <button
-                key={stage.id}
-                onClick={() => setWorkflowStage(stage.id)}
-                className={`flex items-center text-xs font-medium transition-all whitespace-nowrap ${
-                  isActive
-                    ? "text-indigo-700"
-                    : isPast
-                      ? "text-indigo-400 hover:text-indigo-600"
-                      : "text-slate-400 hover:text-slate-600"
-                }`}
+        {/* Subtext + CTAs */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 26,
+            animation: "arc-rise 0.9s ease both",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              maxWidth: 580,
+              fontSize: "clamp(1rem,1.6vw,1.18rem)",
+              lineHeight: 1.5,
+              color: "#5A5448",
+            }}
+          >
+            OralVerse turns a single intraoral scan into a fully staged treatment
+            plan — proposed by AI, refined and approved by you.
+          </p>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 20,
+              flexWrap: "wrap",
+              justifyContent: "center",
+            }}
+          >
+            <Link
+              href="/sign-up"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "15px 28px",
+                borderRadius: 999,
+                background: "#1C1A16",
+                color: "#F2EEE7",
+                fontSize: 15.5,
+                fontWeight: 500,
+                boxShadow:
+                  "0 1px 0 rgba(255,255,255,0.18) inset, 0 10px 28px rgba(28,26,22,0.22)",
+                textDecoration: "none",
+              }}
+            >
+              Get started
+            </Link>
+            <a
+              href="#"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 11,
+                fontSize: 15.5,
+                fontWeight: 500,
+                color: "#1C1A16",
+                textDecoration: "none",
+              }}
+            >
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 34,
+                  height: 34,
+                  borderRadius: "50%",
+                  border: "1px solid rgba(28,26,22,0.28)",
+                }}
               >
-                {/* Circle */}
                 <span
-                  className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all ${
-                    isActive
-                      ? "border-indigo-600 bg-indigo-600 text-white"
-                      : isPast
-                        ? "border-indigo-400 bg-indigo-400 text-white"
-                        : "border-slate-300 bg-white text-slate-400"
-                  }`}
-                >
-                  {isPast && !isActive ? (
-                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <span className="text-[8px] font-bold">{index + 1}</span>
-                  )}
-                </span>
-                {/* Label */}
-                <span className={`ml-1 mr-1 hidden xl:block text-[11px] ${isActive ? "font-semibold text-indigo-700" : ""}`}>
-                  {stage.label}
-                </span>
-                <span className={`ml-1 mr-1 xl:hidden text-[11px] ${isActive ? "font-semibold text-indigo-700" : ""}`}>
-                  {stage.short}
-                </span>
-                {/* Connector */}
-                {index < WORKFLOW_STAGES.length - 1 && (
-                  <span className={`mx-1 h-px w-3 shrink-0 transition-colors ${isPast || isActive ? "bg-indigo-300" : "bg-slate-200"}`} />
-                )}
-              </button>
-            );
-          })}
+                  style={{
+                    width: 0,
+                    height: 0,
+                    borderLeft: "8px solid #1C1A16",
+                    borderTop: "5px solid transparent",
+                    borderBottom: "5px solid transparent",
+                    marginLeft: 2,
+                  }}
+                />
+              </span>
+              Watch the 2-min demo
+            </a>
+          </div>
         </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-2 min-w-[240px] justify-end">
-          {hasActiveCase && !isFirst && (
-            <button
-              onClick={rejectWorkflow}
-              className="rounded-md border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-stone-50 transition"
-            >
-              ← Back
-            </button>
-          )}
-          {hasActiveCase && !isLast && (
-            <button
-              onClick={advanceWorkflow}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 transition"
-            >
-              Continue →
-            </button>
-          )}
-          {hasActiveCase && isLast && (
-            <>
-              <button
-                onClick={() => setApprovalStatus("rejected")}
-                className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 transition"
-              >
-                Reject
-              </button>
-              <button
-                onClick={() => setApprovalStatus("approved")}
-                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 transition"
-              >
-                Approve
-              </button>
-              <button className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 transition">
-                Export Plan
-              </button>
-            </>
-          )}
-        </div>
-      </header>
-
-      {/* ── Body ───────────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
-
-        {/* Case list sidebar */}
-        <CaseListSidebar />
-
-        {hasActiveCase ? (
-          <>
-            {/* Tool panel */}
-            <aside className="flex w-72 shrink-0 flex-col border-r border-stone-200 bg-white overflow-hidden">
-              <div className="border-b border-stone-100 px-4 py-2.5 bg-stone-50">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
-                  {WORKFLOW_STAGES[currentIdx]?.label} tools
-                </p>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4">
-                <StagePanel stage={currentStageId} />
-              </div>
-              <div className="border-t border-stone-100 p-3 bg-white">
-                <button
-                  onClick={advanceWorkflow}
-                  disabled={isLast}
-                  className="w-full rounded-md bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-40 transition-colors"
-                >
-                  {isLast ? "Plan complete" : `Continue to ${WORKFLOW_STAGES[currentIdx + 1]?.label}`}
-                </button>
-              </div>
-            </aside>
-
-            {/* 3D Viewer */}
-            <div className="flex-1 overflow-hidden bg-[#e8e6e3] p-3 pb-0">
-              <div className="w-full h-full rounded-t-xl overflow-hidden shadow-[0_4px_24px_rgb(0,0,0,0.1)] border border-stone-300/40">
-                <TreatmentViewer />
-              </div>
-            </div>
-          </>
-        ) : (
-          <NoPatientSelected />
-        )}
-      </div>
+      </section>
     </main>
   );
 }
