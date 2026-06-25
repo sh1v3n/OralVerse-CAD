@@ -95,6 +95,28 @@ def eval_epoch(model, loader, loss_fn, device) -> tuple[float, float]:
     return total_loss / len(loader), dsc.mean().item()
 
 
+def compute_class_weights(files, num_classes: int, cap: float = 10.0):
+    """Inverse-sqrt-frequency per-class weights from the training labels.
+
+    Reads only the ``labels`` array from each .npz (cheap), so wisdom teeth and
+    other rare classes get upweighted in the focal CE term. Present classes are
+    normalised to mean 1 and clipped to ``cap``; classes absent from training
+    are left neutral (1.0).
+    """
+    counts = np.zeros(num_classes, dtype=np.float64)
+    for p in files:
+        lbl = np.load(p, allow_pickle=False)["labels"].astype(np.int64)
+        counts += np.bincount(lbl, minlength=num_classes)[:num_classes]
+
+    present = counts > 0
+    freq = counts / max(counts.sum(), 1.0)
+    weights = np.where(present, 1.0 / np.sqrt(freq + 1e-6), 1.0)
+    if present.any():
+        weights[present] /= weights[present].mean()
+    weights = np.clip(weights, 0.0, cap)
+    return torch.tensor(weights, dtype=torch.float32)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Train MeshSegNet for per-face tooth segmentation."
@@ -108,6 +130,19 @@ def main() -> None:
     parser.add_argument("--k",         default=K_NEIGHBOURS, type=int)
     parser.add_argument("--max_faces", default=16_000, type=int,
                         help="Subsample meshes larger than this (memory/speed)")
+    parser.add_argument("--gamma",     default=2.0, type=float,
+                        help="Focal-loss focusing parameter (0 = plain CE)")
+    parser.add_argument("--dropout",   default=0.1, type=float,
+                        help="Dropout in the EdgeConv encoder + global MLP")
+    parser.add_argument("--warmup_epochs", default=5, type=int,
+                        help="Linear LR warmup epochs before cosine decay")
+    parser.add_argument("--patience",  default=20, type=int,
+                        help="Early stop after N epochs without val-loss improvement")
+    parser.add_argument("--min_delta", default=1e-3, type=float,
+                        help="Minimum val-loss improvement to reset patience")
+    parser.add_argument("--class_weights", action=argparse.BooleanOptionalAction,
+                        default=True,
+                        help="Weight the focal CE term by inverse-sqrt class frequency")
     args = parser.parse_args()
 
     _check_deps()
@@ -132,16 +167,38 @@ def main() -> None:
 
     print(f"Train: {len(train_ds)} | Val: {len(val_ds)}")
 
-    model    = MeshSegNet(in_features=IN_FEATURES, num_classes=NUM_CLASSES, k=args.k).to(device)
+    model    = MeshSegNet(in_features=IN_FEATURES, num_classes=NUM_CLASSES,
+                          k=args.k, dropout=args.dropout).to(device)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Parameters: {n_params:,}")
 
+    # Per-class focal weights (rare wisdom teeth get upweighted).
+    alpha = None
+    if args.class_weights:
+        alpha = compute_class_weights(train_ds.files, NUM_CLASSES).to(device)
+        print("Class weights:", np.round(alpha.cpu().numpy(), 2).tolist())
+
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-5)
-    loss_fn   = CombinedLoss(num_classes=NUM_CLASSES, ce_weight=0.5).to(device)
+
+    # LR schedule: linear warmup → cosine decay.
+    warmup_epochs = max(0, min(args.warmup_epochs, args.epochs - 1))
+    cosine = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=max(1, args.epochs - warmup_epochs), eta_min=1e-5)
+    if warmup_epochs > 0:
+        warmup = optim.lr_scheduler.LinearLR(
+            optimizer, start_factor=0.01, total_iters=warmup_epochs)
+        scheduler = optim.lr_scheduler.SequentialLR(
+            optimizer, [warmup, cosine], milestones=[warmup_epochs])
+    else:
+        scheduler = cosine
+
+    loss_fn = CombinedLoss(num_classes=NUM_CLASSES, ce_weight=0.5,
+                           gamma=args.gamma, alpha=alpha).to(device)
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    best_dsc = 0.0
+    best_dsc       = 0.0
+    best_val_loss  = float("inf")
+    patience_left  = args.patience
     log: list[dict] = []
 
     for epoch in range(1, args.epochs + 1):
@@ -158,6 +215,7 @@ def main() -> None:
         log.append({"epoch": epoch, "train_loss": train_loss,
                     "val_loss": val_loss, "val_dsc": val_dsc})
 
+        # Save the best checkpoint by clinical metric (DSC).
         if val_dsc > best_dsc:
             best_dsc  = val_dsc
             ckpt_path = args.out_dir / f"meshsegnet_{args.arch}_best.pt"
@@ -172,8 +230,19 @@ def main() -> None:
             }, ckpt_path)
             print(f"  saved best (DSC={val_dsc:.4f}) -> {ckpt_path}")
 
+        # Early stopping on val-loss plateau (combats overfitting).
+        if val_loss < best_val_loss - args.min_delta:
+            best_val_loss = val_loss
+            patience_left = args.patience
+        else:
+            patience_left -= 1
+            if patience_left <= 0:
+                print(f"  early stop: val loss has not improved for "
+                      f"{args.patience} epochs (best={best_val_loss:.4f})")
+                break
+
     (args.out_dir / f"log_{args.arch}.json").write_text(json.dumps(log, indent=2))
-    print(f"\nBest val DSC: {best_dsc:.4f}")
+    print(f"\nBest val DSC: {best_dsc:.4f}  |  best val loss: {best_val_loss:.4f}")
 
 
 if __name__ == "__main__":

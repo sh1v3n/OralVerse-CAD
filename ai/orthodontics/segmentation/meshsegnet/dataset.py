@@ -69,9 +69,9 @@ class TeethSegDataset(Dataset):
             features = features[sel]
             labels   = labels[sel]
 
-        # Data augmentation: random rotation around Y axis
+        # Data augmentation: rotation / mirror-flip / scale / jitter (train only)
         if self.augment:
-            features = _augment(features)
+            features, labels = _augment(features, labels)
 
         knn_idx = _build_knn(features[:, :3], self.k)  # (F, k) — from centroids
 
@@ -86,17 +86,62 @@ class TeethSegDataset(Dataset):
 
 # ── Augmentation ───────────────────────────────────────────────────────────────
 
-def _augment(features: np.ndarray) -> np.ndarray:
-    """Apply random Y-axis rotation to centroids and normals."""
+# Mirror-flip class remap: a mid-sagittal flip swaps the two quadrants of an
+# arch. For both arches the class layout is [0=gingiva, 1..8=one side,
+# 9..16=other side], so flipping is exactly the swap i ↔ i+8 for i in 1..8.
+_FLIP_LABEL_MAP = np.arange(17, dtype=np.int64)
+_FLIP_LABEL_MAP[1:9], _FLIP_LABEL_MAP[9:17] = np.arange(9, 17), np.arange(1, 9)
+
+
+def _rotation_matrix(rx: float, ry: float, rz: float) -> np.ndarray:
+    """Composed XYZ rotation matrix (float32)."""
+    cx, sx = np.cos(rx), np.sin(rx)
+    cy, sy = np.cos(ry), np.sin(ry)
+    cz, sz = np.cos(rz), np.sin(rz)
+    Rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]], dtype=np.float32)
+    Ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]], dtype=np.float32)
+    Rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]], dtype=np.float32)
+    return (Rz @ Ry @ Rx).astype(np.float32)
+
+
+def _augment(features: np.ndarray, labels: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Randomly transform a mesh sample to improve generalisation.
+
+    Applies, to feature columns [centroid(0:3), normal(3:6)] only (curvature and
+    log-area columns are geometry-invariant and left untouched):
+      • mid-sagittal mirror flip (p=0.5) with matching label remap,
+      • full random Y rotation + small random X/Z tilt,
+      • isotropic scale of the centroids,
+      • small Gaussian jitter on the centroids.
+
+    Returns (features, labels) — labels change only on flip.
+    """
     features = features.copy()
-    angle = np.random.uniform(0, 2 * np.pi)
-    cos_a, sin_a = np.cos(angle), np.sin(angle)
-    rot = np.array([[cos_a, 0, sin_a],
-                    [0,     1, 0    ],
-                    [-sin_a,0, cos_a]], dtype=np.float32)
+    labels = labels.copy()
+
+    # Mid-sagittal mirror flip: negate X of centroid & normal, swap quadrants.
+    if np.random.rand() < 0.5:
+        features[:, 0] = -features[:, 0]   # centroid_x
+        features[:, 3] = -features[:, 3]   # normal_x
+        labels = _FLIP_LABEL_MAP[labels]
+
+    # Random rotation: full turn about Y (arch is roughly symmetric about it)
+    # plus a small tilt about X and Z.
+    rot = _rotation_matrix(
+        rx=np.random.uniform(-0.2, 0.2),
+        ry=np.random.uniform(0, 2 * np.pi),
+        rz=np.random.uniform(-0.2, 0.2),
+    )
     features[:, 0:3] = features[:, 0:3] @ rot.T   # rotate centroids
     features[:, 3:6] = features[:, 3:6] @ rot.T   # rotate normals
-    return features
+
+    # Isotropic scale of positions (normals stay unit length).
+    features[:, 0:3] *= np.float32(np.random.uniform(0.85, 1.15))
+
+    # Small positional jitter (normalised units).
+    features[:, 0:3] += np.random.normal(0, 0.01, features[:, 0:3].shape).astype(np.float32)
+
+    return features, labels
 
 
 # ── kNN index ─────────────────────────────────────────────────────────────────

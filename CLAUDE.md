@@ -118,23 +118,27 @@ NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
 - MeshSegNet trained with max 16,000 faces; large meshes may need downsampling at inference
 - `get_segmenter()` returns a cached singleton — model loads once per server process
 
-## Track C — Improving MeshSegNet (Pending)
-Current state: ~22% mean tooth DSC, severe overfitting (train loss 0.21, val loss 2.4).
-Target for clinical use: ~85%+ DSC.
+## Track C — Improving MeshSegNet (Code implemented; awaiting Kaggle run)
+Baseline: ~22% mean tooth DSC, severe overfitting (train loss 0.21, val loss 2.4).
+Target for clinical use: ~85%+ DSC. **The five training-side changes below are now
+implemented** in `model.py` / `dataset.py` / `train.py` (and wired into the notebook).
+What remains is to run `train_kaggle.ipynb` on Kaggle to produce new checkpoints.
 
-Changes needed in `ai/orthodontics/segmentation/meshsegnet/train.py` and a new Kaggle notebook run:
+1. **Focal loss + class weights** — `CombinedLoss` uses focal `(1-p_t)^gamma` CE with
+   optional inverse-sqrt-frequency `alpha` weights (`--gamma`, `--class_weights` in train.py)
+2. **Dropout** — `dropout` param added to `EdgeConv` + `MeshSegNet` encoder/global MLP
+   (default 0.1; classifier keeps 0.4/0.3). Inference-compatible (no new state_dict keys)
+3. **Early stopping on val loss** — `--patience` / `--min_delta`; still saves best-by-DSC checkpoint
+4. **Learning rate warmup** — `LinearLR` warmup (`--warmup_epochs`) → `CosineAnnealingLR` via `SequentialLR`
+5. **Mesh augmentation** — `dataset.py` `_augment(features, labels)`: mid-sagittal mirror-flip
+   with `i↔i+8` label remap, 3-axis rotation, isotropic scale, Gaussian jitter
 
-1. **Focal loss** — replace or weight the CE component to stop ignoring rare classes (wisdom teeth)
-2. **Dropout** — add dropout layers to MeshSegNet to reduce overfitting
-3. **Early stopping on val loss** — current code saves on val DSC; should stop when val loss stops improving
-4. **Learning rate warmup** — ramp LR from 0 over first 5 epochs before cosine decay
-5. **Mesh augmentation** — random rotation/flip of training meshes to improve generalisation
-
-Notebook to update: `ai/orthodontics/segmentation/meshsegnet/train_kaggle.ipynb`
+New hyperparameters documented in `config.yaml`. Notebook: `train_kaggle.ipynb` (train cells pass
+`--gamma 2.0 --warmup_epochs 5 --patience 20`; class weights + augmentation are default-on).
 
 ## Known Issues
-- MeshSegNet DSC ~22% — see Track C above
-- Wisdom teeth (FDI 18/28/38/48) score 0% DSC — class imbalance
-- `WorkflowPanels.tsx` has residual light-themed Tailwind classes
+- MeshSegNet DSC ~22% on the *current* checkpoint — Track C training improvements are
+  implemented in code but a fresh Kaggle run is needed to realise the gain
+- Wisdom teeth (FDI 18/28/38/48) score 0% DSC on the current checkpoint — Track C focal
+  loss + class weights + mirror-flip augmentation target this
 - Treatment plan generation is heuristic/mock — not clinically validated
-- Frontend uncommitted files: `CaseListSidebar.tsx`, `package.json`, `sign-in/`, `sign-up/`

@@ -29,8 +29,11 @@ import torch.nn.functional as F
 class EdgeConv(nn.Module):
     """One EdgeConv block: aggregate k-NN edge features via max-pool."""
 
-    def __init__(self, in_ch: int, out_ch: int) -> None:
+    def __init__(self, in_ch: int, out_ch: int, dropout: float = 0.0) -> None:
         super().__init__()
+        # Dropout is appended at the END so the indices of the parametered
+        # layers (0-5) are unchanged vs. the original block — this keeps old
+        # checkpoints loadable (nn.Dropout has no params and adds no keys).
         self.mlp = nn.Sequential(
             nn.Linear(in_ch * 2, out_ch, bias=False),
             nn.BatchNorm1d(out_ch),
@@ -38,6 +41,7 @@ class EdgeConv(nn.Module):
             nn.Linear(out_ch, out_ch, bias=False),
             nn.BatchNorm1d(out_ch),
             nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(dropout),
         )
 
     def forward(self, x: torch.Tensor, knn_idx: torch.Tensor) -> torch.Tensor:
@@ -74,6 +78,11 @@ class MeshSegNet(nn.Module):
         Number of output classes: 17 per arch (0=gingiva, 1–16=teeth).
     k : int
         Number of nearest neighbours used in EdgeConv (must match dataset).
+    dropout : float
+        Dropout probability applied inside the EdgeConv encoder and the global
+        MLP (the classifier keeps its own fixed 0.4/0.3). Defaults to 0.1; the
+        default is intentionally usable so inference (which constructs the model
+        without this arg) gets the same architecture — eval() disables dropout.
     """
 
     def __init__(
@@ -81,14 +90,15 @@ class MeshSegNet(nn.Module):
         in_features: int = 9,
         num_classes: int = 17,
         k: int = 6,
+        dropout: float = 0.1,
     ) -> None:
         super().__init__()
         self.k = k
 
         # Local feature encoder (3 EdgeConv blocks)
-        self.ec1 = EdgeConv(in_features, 64)
-        self.ec2 = EdgeConv(64, 128)
-        self.ec3 = EdgeConv(128, 256)
+        self.ec1 = EdgeConv(in_features, 64, dropout=dropout)
+        self.ec2 = EdgeConv(64, 128, dropout=dropout)
+        self.ec3 = EdgeConv(128, 256, dropout=dropout)
 
         # Combine multi-scale local features
         local_ch = 64 + 128 + 256  # 448
@@ -100,6 +110,7 @@ class MeshSegNet(nn.Module):
             nn.Linear(local_ch, 256, bias=False),
             nn.LayerNorm(256),
             nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(dropout),
         )
 
         # Per-face classifier
@@ -149,25 +160,54 @@ class MeshSegNet(nn.Module):
 # ── Loss ───────────────────────────────────────────────────────────────────────
 
 class CombinedLoss(nn.Module):
-    """Cross-entropy + Dice loss.
+    """Focal cross-entropy + Dice loss.
 
-    CE handles per-face accuracy; Dice counters class imbalance (gingiva
-    typically accounts for 60–70% of faces, making per-face accuracy easy
-    to game without Dice).
+    The CE term uses *focal* weighting ``(1 - p_t)^gamma`` so easy, abundant
+    gingiva faces stop dominating the gradient and the model is forced to learn
+    rare classes (wisdom teeth scored 0% DSC under plain CE). Optional per-class
+    ``alpha`` weights upweight rare classes further. Dice counters class
+    imbalance at the region level (gingiva is typically 60–70% of faces).
+
+    Parameters
+    ----------
+    num_classes : int
+    ce_weight : float
+        Blend weight for the (focal) CE term; Dice gets ``1 - ce_weight``.
+    gamma : float
+        Focal focusing parameter. ``gamma=0`` reduces to plain (optionally
+        alpha-weighted) cross-entropy — backward compatible.
+    alpha : torch.Tensor | None
+        Optional ``(num_classes,)`` per-class weights for the CE term.
     """
 
-    def __init__(self, num_classes: int = 17, ce_weight: float = 0.5) -> None:
+    def __init__(
+        self,
+        num_classes: int = 17,
+        ce_weight: float = 0.5,
+        gamma: float = 2.0,
+        alpha: torch.Tensor | None = None,
+    ) -> None:
         super().__init__()
         self.num_classes = num_classes
         self.ce_weight = ce_weight
-        self.ce = nn.CrossEntropyLoss()
+        self.gamma = gamma
+        # Register alpha as a buffer so it moves with .to(device) and is saved.
+        if alpha is not None:
+            alpha = torch.as_tensor(alpha, dtype=torch.float32)
+        self.register_buffer("alpha", alpha)
 
     def forward(
         self,
         logits: torch.Tensor,  # (F, num_classes)
         labels: torch.Tensor,  # (F,) long
     ) -> torch.Tensor:
-        ce_loss = self.ce(logits, labels)
+        # Per-face (optionally alpha-weighted) cross-entropy, then focal reweight.
+        ce = F.cross_entropy(logits, labels, weight=self.alpha, reduction="none")  # (F,)
+        if self.gamma > 0:
+            pt = torch.exp(-ce)                          # p_t of the true class
+            ce_loss = ((1.0 - pt) ** self.gamma * ce).mean()
+        else:
+            ce_loss = ce.mean()
 
         probs = F.softmax(logits, dim=-1)               # (F, num_classes)
         one_hot = F.one_hot(labels, self.num_classes).float()  # (F, num_classes)
