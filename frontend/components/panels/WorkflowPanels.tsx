@@ -21,7 +21,7 @@ import type { Measurement } from "@/lib/clinicalMeasurements";
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 border-b border-slate-200 pb-1 mb-2">
+    <p className="text-[10px] font-bold uppercase tracking-widest text-ink-40 border-b border-line pb-1 mb-2">
       {children}
     </p>
   );
@@ -43,23 +43,23 @@ function ToggleRow({
       onClick={onToggle}
       className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-all ${
         checked
-          ? "border-indigo-200 bg-indigo-50"
-          : "border-slate-200 bg-white hover:bg-slate-50"
+          ? "border-clay/30 bg-clay-soft"
+          : "border-line bg-surface-raised hover:bg-cream-200"
       }`}
     >
       <div>
-        <p className={`text-sm font-medium ${checked ? "text-indigo-900" : "text-slate-700"}`}>
+        <p className={`text-sm font-medium ${checked ? "text-clay-dark" : "text-ink"}`}>
           {label}
         </p>
         {description && (
-          <p className="text-[11px] text-slate-400 leading-tight mt-0.5">{description}</p>
+          <p className="text-[11px] text-ink-40 leading-tight mt-0.5">{description}</p>
         )}
       </div>
       <div
-        className={`relative h-5 w-9 rounded-full transition-colors ${checked ? "bg-indigo-600" : "bg-slate-200"}`}
+        className={`relative h-5 w-9 rounded-full transition-colors ${checked ? "bg-clay" : "bg-cream-300"}`}
       >
         <div
-          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
+          className={`absolute top-0.5 h-4 w-4 rounded-full bg-surface-raised shadow transition-all ${
             checked ? "left-4" : "left-0.5"
           }`}
         />
@@ -92,7 +92,7 @@ function ToothGrid({
 
   const colorClass = color === "red"
     ? "bg-red-100 text-red-700 border-red-300 ring-red-400"
-    : "bg-indigo-100 text-indigo-700 border-indigo-300 ring-indigo-400";
+    : "bg-clay-soft text-clay-dark border-clay/40 ring-clay";
 
   return (
     <div className="space-y-1.5">
@@ -108,7 +108,7 @@ function ToothGrid({
                 className={`relative h-8 w-7 rounded border text-[9px] font-bold transition-all ${
                   isSelected
                     ? `${colorClass} ring-1`
-                    : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                    : "border-line bg-cream-200 text-ink-40 hover:bg-cream-200"
                 }`}
               >
                 {fdi}
@@ -135,7 +135,7 @@ export function PreprocessingPanel() {
       {/* Drag-and-drop as secondary option */}
       <details className="group">
         <summary className="cursor-pointer list-none">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-stone-400 hover:text-stone-600 transition-colors py-1 border-t border-stone-100">
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-ink-40 hover:text-ink-70 transition-colors py-1 border-t border-line">
             <svg className="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
@@ -251,7 +251,7 @@ function buildGingivaGeometry(
 
 function VerificationBadge({ state }: { state: VerificationState }) {
   const cfg = {
-    auto:      { label: "Auto",     cls: "bg-slate-100 text-slate-500" },
+    auto:      { label: "Auto",     cls: "bg-cream-200 text-ink-40" },
     reviewed:  { label: "Reviewed", cls: "bg-blue-100 text-blue-700" },
     corrected: { label: "Edited",   cls: "bg-amber-100 text-amber-700" },
     verified:  { label: "Verified", cls: "bg-emerald-100 text-emerald-700" },
@@ -279,10 +279,10 @@ function FdiReassignPicker({
   const lower = ALL_FDI.filter((f) => f >= 30);
 
   return (
-    <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-3">
+    <div className="rounded-lg border border-clay/30 bg-clay-soft p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-indigo-900">Reassign FDI {tooth.fdi}</p>
-        <button onClick={onClose} className="text-[10px] text-indigo-400 hover:text-indigo-700">✕</button>
+        <p className="text-xs font-semibold text-clay-dark">Reassign FDI {tooth.fdi}</p>
+        <button onClick={onClose} className="text-[10px] text-clay hover:text-clay-dark">✕</button>
       </div>
       <div className="space-y-1.5">
         {[upper, lower].map((row, ri) => (
@@ -293,10 +293,10 @@ function FdiReassignPicker({
                 onClick={() => setPending(fdi)}
                 className={`h-7 w-6 rounded border text-[9px] font-bold transition-all ${
                   fdi === pending
-                    ? "border-indigo-500 bg-indigo-600 text-white"
+                    ? "border-clay bg-clay text-white"
                     : fdi === tooth.fdi
-                    ? "border-slate-300 bg-slate-200 text-slate-500"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-indigo-50"
+                    ? "border-line bg-cream-300 text-ink-40"
+                    : "border-line bg-surface-raised text-ink-70 hover:bg-clay-soft"
                 }`}
               >
                 {fdi}
@@ -308,7 +308,7 @@ function FdiReassignPicker({
       <div className="flex gap-2">
         <button
           onClick={onClose}
-          className="flex-1 rounded border border-slate-200 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+          className="flex-1 rounded border border-line py-1.5 text-xs text-ink-70 hover:bg-cream-200"
         >
           Cancel
         </button>
@@ -318,7 +318,7 @@ function FdiReassignPicker({
             reassignFdi(tooth.fdi, pending);
             onClose();
           }}
-          className="flex-1 rounded bg-indigo-600 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-40"
+          className="flex-1 rounded bg-clay py-1.5 text-xs font-semibold text-white hover:bg-clay-dark disabled:opacity-40"
         >
           Reassign → {pending}
         </button>
@@ -360,15 +360,15 @@ function SplitPicker({
   const lower = available.filter((f) => f >= 30);
 
   return (
-    <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 space-y-3">
+    <div className="rounded-lg border border-clay/30 bg-clay-soft p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-violet-900">Split tooth {tooth.fdi}</p>
-        <button onClick={onClose} className="text-[10px] text-violet-400 hover:text-violet-700">✕</button>
+        <p className="text-xs font-semibold text-clay-dark">Split tooth {tooth.fdi}</p>
+        <button onClick={onClose} className="text-[10px] text-clay hover:text-clay-dark">✕</button>
       </div>
 
       {/* Axis selector */}
       <div className="space-y-1">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-violet-500">Cut axis</p>
+        <p className="text-[9px] font-bold uppercase tracking-widest text-clay">Cut axis</p>
         <div className="flex gap-1">
           {SPLIT_AXES.map(({ axis: a, label, hint }) => (
             <button
@@ -377,22 +377,22 @@ function SplitPicker({
               title={hint}
               className={`flex-1 rounded border py-1 text-[9px] font-bold transition-all ${
                 axis === a
-                  ? "border-violet-500 bg-violet-600 text-white"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-violet-50"
+                  ? "border-clay bg-clay text-white"
+                  : "border-line bg-surface-raised text-ink-70 hover:bg-clay-soft"
               }`}
             >
               {label}
             </button>
           ))}
         </div>
-        <p className="text-[9px] text-violet-400">
+        <p className="text-[9px] text-clay">
           {SPLIT_AXES.find((s) => s.axis === axis)?.hint}
         </p>
       </div>
 
       {/* New FDI picker */}
       <div className="space-y-1.5">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-violet-500">New tooth FDI</p>
+        <p className="text-[9px] font-bold uppercase tracking-widest text-clay">New tooth FDI</p>
         {[upper, lower].map((row, ri) => (
           <div key={ri} className="flex gap-0.5 justify-center flex-wrap">
             {(ri === 0 ? [...row].reverse() : row).map((fdi) => (
@@ -401,8 +401,8 @@ function SplitPicker({
                 onClick={() => setNewFdi(fdi)}
                 className={`h-7 w-6 rounded border text-[9px] font-bold transition-all ${
                   fdi === newFdi
-                    ? "border-violet-500 bg-violet-600 text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-violet-50"
+                    ? "border-clay bg-clay text-white"
+                    : "border-line bg-surface-raised text-ink-70 hover:bg-clay-soft"
                 }`}
               >
                 {fdi}
@@ -415,7 +415,7 @@ function SplitPicker({
       <div className="flex gap-2">
         <button
           onClick={onClose}
-          className="flex-1 rounded border border-slate-200 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+          className="flex-1 rounded border border-line py-1.5 text-xs text-ink-70 hover:bg-cream-200"
         >
           Cancel
         </button>
@@ -424,7 +424,7 @@ function SplitPicker({
             splitTooth(tooth.fdi, axis, newFdi);
             onClose();
           }}
-          className="flex-1 rounded bg-violet-600 py-1.5 text-xs font-semibold text-white hover:bg-violet-700"
+          className="flex-1 rounded bg-clay py-1.5 text-xs font-semibold text-white hover:bg-clay-dark"
         >
           Split → {tooth.fdi} + {newFdi}
         </button>
@@ -525,9 +525,9 @@ export function SegmentationPanel() {
     <div className="space-y-4">
       {/* Status / run button */}
       {isSegmenting && (
-        <div className="rounded-lg bg-indigo-50 border border-indigo-200 p-3 flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded-full border-2 border-indigo-300 border-t-indigo-600 animate-spin shrink-0" />
-          <p className="text-xs text-indigo-800">Segmenting arch on server…</p>
+        <div className="rounded-lg bg-clay-soft border border-clay/30 p-3 flex items-center gap-2">
+          <span className="h-3.5 w-3.5 rounded-full border-2 border-clay/40 border-t-clay animate-spin shrink-0" />
+          <p className="text-xs text-clay-dark">Segmenting arch on server…</p>
         </div>
       )}
 
@@ -544,7 +544,7 @@ export function SegmentationPanel() {
       {hasSTL && !segmented && !isSegmenting && !segmentError && (
         <button
           onClick={() => void handleRunSegmentation()}
-          className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 transition-colors"
+          className="w-full rounded-md bg-clay px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-clay-dark transition-colors"
         >
           Run Segmentation
         </button>
@@ -559,12 +559,12 @@ export function SegmentationPanel() {
             </p>
             <button
               onClick={() => { clearSegmentation(); setSegmented(false); setReassignTarget(null); }}
-              className="text-[10px] text-slate-500 hover:text-slate-700 underline"
+              className="text-[10px] text-ink-40 hover:text-ink underline"
             >
               Reset
             </button>
           </div>
-          <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+          <div className="w-full h-1.5 rounded-full bg-cream-300 overflow-hidden">
             <div
               className={`h-full rounded-full transition-all ${allVerified ? "bg-emerald-500" : "bg-amber-500"}`}
               style={{ width: `${summary.total ? (summary.verified / summary.total) * 100 : 0}%` }}
@@ -580,10 +580,10 @@ export function SegmentationPanel() {
 
       {/* Mesh info */}
       {hasSTL && !segmented && (
-        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 space-y-1">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Loaded mesh</p>
-          {upperInfo && <div className="flex justify-between text-[11px]"><span className="text-slate-600 truncate max-w-[140px]">{upperInfo.fileName}</span><span className="text-slate-400">{(upperInfo.triangles / 1000).toFixed(0)}K △</span></div>}
-          {lowerInfo && <div className="flex justify-between text-[11px]"><span className="text-slate-600 truncate max-w-[140px]">{lowerInfo.fileName}</span><span className="text-slate-400">{(lowerInfo.triangles / 1000).toFixed(0)}K △</span></div>}
+        <div className="rounded-lg bg-cream-200 border border-line p-3 space-y-1">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-ink-40">Loaded mesh</p>
+          {upperInfo && <div className="flex justify-between text-[11px]"><span className="text-ink-70 truncate max-w-[140px]">{upperInfo.fileName}</span><span className="text-ink-40">{(upperInfo.triangles / 1000).toFixed(0)}K △</span></div>}
+          {lowerInfo && <div className="flex justify-between text-[11px]"><span className="text-ink-70 truncate max-w-[140px]">{lowerInfo.fileName}</span><span className="text-ink-40">{(lowerInfo.triangles / 1000).toFixed(0)}K △</span></div>}
         </div>
       )}
 
@@ -592,7 +592,7 @@ export function SegmentationPanel() {
         <>
           {/* Multi-select toolbar */}
           <div className="flex items-center gap-2">
-            <p className="text-[10px] text-slate-400 flex-1">
+            <p className="text-[10px] text-ink-40 flex-1">
               {selectedArray.length === 0
                 ? "Click rows to select teeth"
                 : `${selectedArray.length} selected`}
@@ -601,7 +601,7 @@ export function SegmentationPanel() {
               <button
                 onClick={() => undo()}
                 title="Undo last correction (⌘Z)"
-                className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-500 hover:bg-slate-50 transition-colors"
+                className="rounded border border-line bg-surface-raised px-2 py-1 text-[10px] font-semibold text-ink-40 hover:bg-cream-200 transition-colors"
               >
                 ↩ Undo
               </button>
@@ -610,7 +610,7 @@ export function SegmentationPanel() {
               disabled={!canMerge}
               onClick={() => mergeTeeth(selectedArray[0], selectedArray[1])}
               title="Merge two selected teeth into one"
-              className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="rounded border border-line bg-surface-raised px-2 py-1 text-[10px] font-semibold text-ink-70 hover:bg-cream-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               Merge
             </button>
@@ -625,10 +625,10 @@ export function SegmentationPanel() {
               title={canSplit ? "Split selected tooth at midplane" : "Select exactly 1 tooth to split"}
               className={`rounded border px-2 py-1 text-[10px] font-semibold transition-colors ${
                 splitTarget !== null
-                  ? "border-violet-400 bg-violet-100 text-violet-700"
+                  ? "border-clay bg-clay-soft text-clay-dark"
                   : canSplit
-                  ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                  : "border-slate-200 bg-white text-slate-400 opacity-40 cursor-not-allowed"
+                  ? "border-line bg-surface-raised text-ink-70 hover:bg-cream-200"
+                  : "border-line bg-surface-raised text-ink-40 opacity-40 cursor-not-allowed"
               }`}
             >
               Split
@@ -661,7 +661,7 @@ export function SegmentationPanel() {
           {/* Per-tooth list */}
           <div className="space-y-0.5">
             <SectionHeader>Teeth ({teeth.length})</SectionHeader>
-            <div className="rounded-lg border border-slate-200 overflow-hidden divide-y divide-slate-100">
+            <div className="rounded-lg border border-line overflow-hidden divide-y divide-line">
               {sortedTeeth.map((tooth) => {
                 const isSelected = selectedFdis.has(tooth.fdi);
                 const conf = tooth.segmentation.confidence;
@@ -672,7 +672,7 @@ export function SegmentationPanel() {
                   <div
                     key={tooth.fdi}
                     className={`flex items-center gap-2 px-2 py-2 cursor-pointer transition-colors ${
-                      isSelected ? "bg-indigo-50" : "bg-white hover:bg-slate-50"
+                      isSelected ? "bg-clay-soft" : "bg-surface-raised hover:bg-cream-200"
                     }`}
                     onClick={() => toggleTooth(tooth.fdi)}
                   >
@@ -685,21 +685,21 @@ export function SegmentationPanel() {
                     {/* FDI + kind */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-800">{tooth.fdi}</span>
-                        <span className="text-[10px] text-slate-400 capitalize">{tooth.kind}</span>
+                        <span className="text-xs font-bold text-ink">{tooth.fdi}</span>
+                        <span className="text-[10px] text-ink-40 capitalize">{tooth.kind}</span>
                         <VerificationBadge state={state} />
                       </div>
                       <div className="flex items-center gap-1 mt-0.5">
                         {/* Confidence bar */}
-                        <div className="h-1 w-12 rounded-full bg-slate-200 overflow-hidden">
+                        <div className="h-1 w-12 rounded-full bg-cream-300 overflow-hidden">
                           <div
                             className={`h-full rounded-full ${conf >= 0.8 ? "bg-emerald-400" : conf >= 0.6 ? "bg-amber-400" : "bg-red-400"}`}
                             style={{ width: `${conf * 100}%` }}
                           />
                         </div>
                         <span className={`text-[10px] font-mono ${confColor}`}>{(conf * 100).toFixed(0)}%</span>
-                        <span className="text-[9px] text-slate-300">·</span>
-                        <span className="text-[10px] text-slate-400">{tooth.segmentation.triangleCount}△</span>
+                        <span className="text-[9px] text-ink-40">·</span>
+                        <span className="text-[10px] text-ink-40">{tooth.segmentation.triangleCount}△</span>
                       </div>
                     </div>
 
@@ -719,8 +719,8 @@ export function SegmentationPanel() {
                         title="Reassign FDI"
                         className={`h-6 w-6 rounded border text-[10px] flex items-center justify-center transition-colors ${
                           reassignTarget === tooth.fdi
-                            ? "border-indigo-400 bg-indigo-100 text-indigo-700"
-                            : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                            ? "border-clay bg-clay-soft text-clay-dark"
+                            : "border-line bg-cream-200 text-ink-40 hover:bg-cream-200"
                         }`}
                       >
                         #
@@ -735,17 +735,17 @@ export function SegmentationPanel() {
           {/* Quick select for viewer */}
           <div>
             <SectionHeader>Viewer selection</SectionHeader>
-            <p className="text-[10px] text-slate-400 mb-1.5">Active in 3D viewer</p>
+            <p className="text-[10px] text-ink-40 mb-1.5">Active in 3D viewer</p>
             {selectedFdi ? (
-              <div className="flex items-center justify-between rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2">
+              <div className="flex items-center justify-between rounded-lg bg-clay-soft border border-clay/30 px-3 py-2">
                 <div>
-                  <p className="text-sm font-bold text-indigo-900">FDI {selectedFdi}</p>
-                  <p className="text-[11px] text-indigo-500 capitalize">{toothKind(selectedFdi)}</p>
+                  <p className="text-sm font-bold text-clay-dark">FDI {selectedFdi}</p>
+                  <p className="text-[11px] text-clay capitalize">{toothKind(selectedFdi)}</p>
                 </div>
-                <button onClick={() => selectTooth(null)} className="text-xs text-indigo-500 hover:text-indigo-800 underline">Clear</button>
+                <button onClick={() => selectTooth(null)} className="text-xs text-clay hover:text-clay-dark underline">Clear</button>
               </div>
             ) : (
-              <p className="text-xs text-slate-400 italic text-center py-2">Click a tooth in the viewer</p>
+              <p className="text-xs text-ink-40 italic text-center py-2">Click a tooth in the viewer</p>
             )}
           </div>
         </>
@@ -760,8 +760,8 @@ function SelectedToothAnalysis() {
 
   if (!selectedFdi) {
     return (
-      <div className="rounded-lg border border-slate-200 border-dashed p-4 text-center mt-4">
-        <p className="text-xs text-slate-500">Select a tooth in the viewer to view analysis</p>
+      <div className="rounded-lg border border-line border-dashed p-4 text-center mt-4">
+        <p className="text-xs text-ink-40">Select a tooth in the viewer to view analysis</p>
       </div>
     );
   }
@@ -771,26 +771,26 @@ function SelectedToothAnalysis() {
   return (
     <div className="mt-4">
       <SectionHeader>Selected tooth analysis</SectionHeader>
-      <div className="rounded-lg bg-indigo-50 border border-indigo-200 p-3 space-y-2">
+      <div className="rounded-lg bg-clay-soft border border-clay/30 p-3 space-y-2">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-bold text-indigo-900">FDI {selectedFdi}</p>
-            <p className="text-[11px] text-indigo-500 capitalize">{toothKind(selectedFdi)}</p>
+            <p className="text-sm font-bold text-clay-dark">FDI {selectedFdi}</p>
+            <p className="text-[11px] text-clay capitalize">{toothKind(selectedFdi)}</p>
           </div>
-          <button onClick={() => selectTooth(null)} className="text-xs text-indigo-500 hover:text-indigo-800 underline">Clear</button>
+          <button onClick={() => selectTooth(null)} className="text-xs text-clay hover:text-clay-dark underline">Clear</button>
         </div>
 
         {toothPlan && (
-          <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-indigo-100">
+          <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-clay/20">
             <div>
-              <p className="text-[9px] uppercase tracking-wide text-indigo-400">Total Movement</p>
-              <p className="text-[11px] text-indigo-700 font-mono">
+              <p className="text-[9px] uppercase tracking-wide text-clay">Total Movement</p>
+              <p className="text-[11px] text-clay-dark font-mono">
                 {Math.abs(toothPlan.target.position[0] - toothPlan.initial.position[0]).toFixed(1)}mm
               </p>
             </div>
             <div>
-              <p className="text-[9px] uppercase tracking-wide text-indigo-400">Total Rotation</p>
-              <p className="text-[11px] text-indigo-700 font-mono">
+              <p className="text-[9px] uppercase tracking-wide text-clay">Total Rotation</p>
+              <p className="text-[11px] text-clay-dark font-mono">
                 {Math.abs(toothPlan.target.rotation[1] - toothPlan.initial.rotation[1]).toFixed(0)}°
               </p>
             </div>
@@ -814,11 +814,11 @@ function MetricRow({ label, initial, current, target, showChange = false }: {
   if (!m) return null;
 
   return (
-    <div className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
+    <div className="flex items-center justify-between py-1.5 border-b border-line last:border-0">
       <div className="flex items-center gap-1.5">
-        <span className="text-[11px] font-medium text-slate-700">{label}</span>
+        <span className="text-[11px] font-medium text-ink">{label}</span>
         {m.confidence !== "high" && (
-           <span className="cursor-help text-slate-400 text-[10px]" title={`Approximation based on tooth centroids and bounding boxes. Not intended for clinical use. (${m.confidence} confidence)`}>
+           <span className="cursor-help text-ink-40 text-[10px]" title={`Approximation based on tooth centroids and bounding boxes. Not intended for clinical use. (${m.confidence} confidence)`}>
              ⓘ
            </span>
         )}
@@ -826,12 +826,12 @@ function MetricRow({ label, initial, current, target, showChange = false }: {
       <div className="flex items-center gap-2">
         {showChange && initial && (
           <>
-            <span className="text-[11px] text-slate-400 line-through">{initial.value.toFixed(1)}</span>
-            <span className="text-[10px] text-slate-300">→</span>
+            <span className="text-[11px] text-ink-40 line-through">{initial.value.toFixed(1)}</span>
+            <span className="text-[10px] text-ink-40">→</span>
           </>
         )}
         <div className="flex items-center gap-1">
-          <span className={`text-[11px] font-mono font-semibold ${m.isNormal ? "text-slate-700" : "text-red-600"}`}>
+          <span className={`text-[11px] font-mono font-semibold ${m.isNormal ? "text-ink" : "text-red-600"}`}>
             {m.value.toFixed(1)} mm
           </span>
           {!m.isNormal && m.normativeRange && (
@@ -852,7 +852,7 @@ export function ClinicalDiagnosticsPanel({ showChange = false }: { showChange?: 
   return (
     <div className="mt-6 space-y-2">
       <SectionHeader>Clinical Diagnostics</SectionHeader>
-      <div className="rounded-lg bg-white border border-slate-200 p-3 shadow-sm">
+      <div className="rounded-lg bg-surface-raised border border-line p-3 shadow-sm">
         <MetricRow label="Overjet" initial={initial?.overjet} current={current?.overjet} target={target?.overjet} showChange={showChange} />
         <MetricRow label="Overbite" initial={initial?.overbite} current={current?.overbite} target={target?.overbite} showChange={showChange} />
         <MetricRow label="Midline Deviation" initial={initial?.midlineDeviation} current={current?.midlineDeviation} target={target?.midlineDeviation} showChange={showChange} />
@@ -904,47 +904,47 @@ export function InitialPositionPanel() {
           <div className="space-y-2 text-xs">
             {/* Translation X */}
             <div className="flex items-center gap-2">
-              <span className="w-8 text-slate-500 font-mono">TX</span>
+              <span className="w-8 text-ink-40 font-mono">TX</span>
               <input
                 type="range" min={-5} max={5} step={0.1}
                 value={tooth.transform.translation[0]}
                 onChange={(e) => handleTransformChange(tooth.fdi, {
                   translation: [parseFloat(e.target.value), tooth.transform.translation[1], tooth.transform.translation[2]]
                 })}
-                className="flex-1 accent-indigo-600"
+                className="flex-1 accent-clay"
               />
-              <span className="w-8 text-right text-slate-400 font-mono">{tooth.transform.translation[0].toFixed(1)}</span>
+              <span className="w-8 text-right text-ink-40 font-mono">{tooth.transform.translation[0].toFixed(1)}</span>
             </div>
 
             {/* Translation Z */}
             <div className="flex items-center gap-2">
-              <span className="w-8 text-slate-500 font-mono">TZ</span>
+              <span className="w-8 text-ink-40 font-mono">TZ</span>
               <input
                 type="range" min={-5} max={5} step={0.1}
                 value={tooth.transform.translation[2]}
                 onChange={(e) => handleTransformChange(tooth.fdi, {
                   translation: [tooth.transform.translation[0], tooth.transform.translation[1], parseFloat(e.target.value)]
                 })}
-                className="flex-1 accent-indigo-600"
+                className="flex-1 accent-clay"
               />
-              <span className="w-8 text-right text-slate-400 font-mono">{tooth.transform.translation[2].toFixed(1)}</span>
+              <span className="w-8 text-right text-ink-40 font-mono">{tooth.transform.translation[2].toFixed(1)}</span>
             </div>
 
             {/* Intrusion */}
             <div className="flex items-center gap-2">
-              <span className="w-8 text-slate-500 font-mono" title="Intrusion/Extrusion">TY</span>
+              <span className="w-8 text-ink-40 font-mono" title="Intrusion/Extrusion">TY</span>
               <input
                 type="range" min={-5} max={5} step={0.1}
                 value={tooth.transform.intrusion}
                 onChange={(e) => handleTransformChange(tooth.fdi, { intrusion: parseFloat(e.target.value) })}
-                className="flex-1 accent-indigo-600"
+                className="flex-1 accent-clay"
               />
-              <span className="w-8 text-right text-slate-400 font-mono">{tooth.transform.intrusion.toFixed(1)}</span>
+              <span className="w-8 text-right text-ink-40 font-mono">{tooth.transform.intrusion.toFixed(1)}</span>
             </div>
 
             {/* Rotation (Torque/Tip/Rot) */}
             <div className="flex items-center gap-2 pt-2">
-              <span className="w-8 text-slate-500 font-mono" title="Torque (Rot X)">TRQ</span>
+              <span className="w-8 text-ink-40 font-mono" title="Torque (Rot X)">TRQ</span>
               <input
                 type="range" min={-45} max={45} step={1}
                 value={tooth.transform.rotation[0]}
@@ -953,11 +953,11 @@ export function InitialPositionPanel() {
                 })}
                 className="flex-1 accent-amber-500"
               />
-              <span className="w-8 text-right text-slate-400 font-mono">{tooth.transform.rotation[0].toFixed(0)}°</span>
+              <span className="w-8 text-right text-ink-40 font-mono">{tooth.transform.rotation[0].toFixed(0)}°</span>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="w-8 text-slate-500 font-mono" title="Tip (Rot Z)">TIP</span>
+              <span className="w-8 text-ink-40 font-mono" title="Tip (Rot Z)">TIP</span>
               <input
                 type="range" min={-45} max={45} step={1}
                 value={tooth.transform.rotation[2]}
@@ -966,11 +966,11 @@ export function InitialPositionPanel() {
                 })}
                 className="flex-1 accent-amber-500"
               />
-              <span className="w-8 text-right text-slate-400 font-mono">{tooth.transform.rotation[2].toFixed(0)}°</span>
+              <span className="w-8 text-right text-ink-40 font-mono">{tooth.transform.rotation[2].toFixed(0)}°</span>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="w-8 text-slate-500 font-mono" title="Rotation (Rot Y)">ROT</span>
+              <span className="w-8 text-ink-40 font-mono" title="Rotation (Rot Y)">ROT</span>
               <input
                 type="range" min={-90} max={90} step={1}
                 value={tooth.transform.rotation[1]}
@@ -979,13 +979,13 @@ export function InitialPositionPanel() {
                 })}
                 className="flex-1 accent-amber-500"
               />
-              <span className="w-8 text-right text-slate-400 font-mono">{tooth.transform.rotation[1].toFixed(0)}°</span>
+              <span className="w-8 text-right text-ink-40 font-mono">{tooth.transform.rotation[1].toFixed(0)}°</span>
             </div>
           </div>
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-200 border-dashed p-4 text-center">
-          <p className="text-xs text-slate-500">Select a tooth in the viewer to transform</p>
+        <div className="rounded-lg border border-line border-dashed p-4 text-center">
+          <p className="text-xs text-ink-40">Select a tooth in the viewer to transform</p>
         </div>
       )}
 
@@ -997,7 +997,7 @@ export function InitialPositionPanel() {
             invalidatePlan();
             alert("Auto Align applied: Teeth snapped to ideal arch curve (mock)");
           }}
-          className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+          className="rounded-md border border-line bg-surface-raised px-2 py-2 text-xs font-medium text-ink hover:bg-cream-200 hover:border-line transition-colors"
         >
           Auto Align
         </button>
@@ -1006,7 +1006,7 @@ export function InitialPositionPanel() {
             useToothObjectStore.getState().resetAllTransforms();
             invalidatePlan();
           }}
-          className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+          className="rounded-md border border-line bg-surface-raised px-2 py-2 text-xs font-medium text-ink hover:bg-cream-200 hover:border-line transition-colors"
         >
           Reset Positions
         </button>
@@ -1014,7 +1014,7 @@ export function InitialPositionPanel() {
           onClick={() => {
             alert("Mirror Arch functionality will be available in the next clinical update.");
           }}
-          className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+          className="rounded-md border border-line bg-surface-raised px-2 py-2 text-xs font-medium text-ink hover:bg-cream-200 hover:border-line transition-colors"
         >
           Mirror Arch
         </button>
@@ -1022,7 +1022,7 @@ export function InitialPositionPanel() {
           onClick={() => {
             alert("Occlusion verified: No severe collisions detected.");
           }}
-          className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+          className="rounded-md border border-line bg-surface-raised px-2 py-2 text-xs font-medium text-ink hover:bg-cream-200 hover:border-line transition-colors"
         >
           Verify Occlusion
         </button>
@@ -1030,7 +1030,7 @@ export function InitialPositionPanel() {
 
       {/* Generate Treatment Plan */}
       {hasTeeth && (
-        <div className="border-t border-slate-100 pt-4 mt-2">
+        <div className="border-t border-line pt-4 mt-2">
           <button
             onClick={() => void generatePlan()}
             disabled={isGenerating}
@@ -1129,7 +1129,7 @@ export function TreatmentPlanPanel() {
 
       <div className="space-y-2">
         <SectionHeader>Extraction planning</SectionHeader>
-        <p className="text-[11px] text-slate-500 mb-2">
+        <p className="text-[11px] text-ink-40 mb-2">
           Select teeth to extract. {record.extractedTeeth.length > 0
             ? `${record.extractedTeeth.length} marked`
             : "None"}
@@ -1143,7 +1143,7 @@ export function TreatmentPlanPanel() {
 
       <div className="space-y-2">
         <SectionHeader>Tooth locking</SectionHeader>
-        <p className="text-[11px] text-slate-500 mb-2">
+        <p className="text-[11px] text-ink-40 mb-2">
           Lock teeth from movement. Separate anterior from posterior for best results.
         </p>
         <ToothGrid
@@ -1182,8 +1182,8 @@ export function FinalPositionPanel() {
       </div>
 
       {!hasPlan && (
-        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
-          <p className="text-xs text-slate-500">Generate a treatment plan first to see final positions</p>
+        <div className="rounded-lg border border-dashed border-line bg-cream-200 px-4 py-6 text-center">
+          <p className="text-xs text-ink-40">Generate a treatment plan first to see final positions</p>
         </div>
       )}
 
@@ -1202,8 +1202,8 @@ export function FinalPositionPanel() {
                   }}
                   className={`flex-1 rounded-lg py-2 text-xs font-semibold capitalize transition-all ${
                     compareMode === mode
-                      ? "bg-indigo-600 text-white shadow-sm"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      ? "bg-clay text-white shadow-sm"
+                      : "bg-cream-200 text-ink-70 hover:bg-cream-300"
                   }`}
                 >
                   {mode}
@@ -1213,19 +1213,19 @@ export function FinalPositionPanel() {
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-center">
-            <div className="rounded-lg bg-slate-50 border border-slate-200 p-2">
-              <p className="text-base font-bold text-slate-800">{stagedPlan.totalStages}</p>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wide">Total Stages</p>
+            <div className="rounded-lg bg-cream-200 border border-line p-2">
+              <p className="text-base font-bold text-ink">{stagedPlan.totalStages}</p>
+              <p className="text-[10px] text-ink-40 uppercase tracking-wide">Total Stages</p>
             </div>
-            <div className="rounded-lg bg-slate-50 border border-slate-200 p-2">
-              <p className="text-base font-bold text-slate-800">{Object.keys(stagedPlan.teeth).length}</p>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wide">Teeth Moved</p>
+            <div className="rounded-lg bg-cream-200 border border-line p-2">
+              <p className="text-base font-bold text-ink">{Object.keys(stagedPlan.teeth).length}</p>
+              <p className="text-[10px] text-ink-40 uppercase tracking-wide">Teeth Moved</p>
             </div>
-            <div className="col-span-2 rounded-lg bg-slate-50 border border-slate-200 p-2">
-              <p className="text-base font-bold text-slate-800">
+            <div className="col-span-2 rounded-lg bg-cream-200 border border-line p-2">
+              <p className="text-base font-bold text-ink">
                 {Math.ceil(stagedPlan.totalStages * 10 / 30)} months
               </p>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wide">Estimated Duration</p>
+              <p className="text-[10px] text-ink-40 uppercase tracking-wide">Estimated Duration</p>
             </div>
           </div>
         </>
@@ -1242,15 +1242,15 @@ export function StagingPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg bg-violet-50 border border-violet-100 p-3">
-        <p className="text-xs text-violet-800 leading-tight">
+      <div className="rounded-lg bg-clay-soft border border-clay/20 p-3">
+        <p className="text-xs text-clay-dark leading-tight">
           Step through aligner stages and verify tooth movement per stage.
         </p>
       </div>
 
       {!plan && (
-        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
-          <p className="text-xs text-slate-500">Generate a treatment plan first to enable staging</p>
+        <div className="rounded-lg border border-dashed border-line bg-cream-200 px-4 py-6 text-center">
+          <p className="text-xs text-ink-40">Generate a treatment plan first to enable staging</p>
         </div>
       )}
 
@@ -1306,7 +1306,7 @@ export function AttachmentsPanel() {
                 <span
                   key={fdi}
                   title={m.attachment?.type}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-cyan-100 text-[10px] font-bold text-cyan-800"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-clay-soft text-[10px] font-bold text-clay-dark"
                 >
                   {fdi}
                 </span>
@@ -1321,11 +1321,11 @@ export function AttachmentsPanel() {
           <SectionHeader>IPR plan ({iprList.length} sites)</SectionHeader>
           <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
             {iprList.map((ipr, i) => (
-              <div key={i} className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-2 py-1.5 text-[11px]">
-                <span className="text-slate-700 font-medium">
+              <div key={i} className="flex items-center justify-between rounded-lg bg-cream-200 border border-line px-2 py-1.5 text-[11px]">
+                <span className="text-ink font-medium">
                   {ipr.between[0]} ↔ {ipr.between[1]}
                 </span>
-                <span className="text-slate-500">{ipr.amount_mm.toFixed(2)} mm · Stage {ipr.stage}</span>
+                <span className="text-ink-40">{ipr.amount_mm.toFixed(2)} mm · Stage {ipr.stage}</span>
               </div>
             ))}
           </div>
@@ -1350,9 +1350,9 @@ export function ReviewPanel() {
           { label: "Duration", value: `${plan.prediction.estimated_duration_months}m` },
           { label: "Refinement risk", value: `${Math.round(plan.prediction.refinement_probability * 100)}%` },
         ].map((m) => (
-          <div key={m.label} className="rounded-lg bg-slate-50 border border-slate-200 p-2">
-            <p className="text-base font-bold text-slate-800">{m.value}</p>
-            <p className="text-[9px] text-slate-500 uppercase tracking-wide">{m.label}</p>
+          <div key={m.label} className="rounded-lg bg-cream-200 border border-line p-2">
+            <p className="text-base font-bold text-ink">{m.value}</p>
+            <p className="text-[9px] text-ink-40 uppercase tracking-wide">{m.label}</p>
           </div>
         ))}
       </div>
@@ -1360,7 +1360,7 @@ export function ReviewPanel() {
       <div>
         <SectionHeader>Clinical notes</SectionHeader>
         <textarea
-          className="w-full rounded-md border border-slate-200 p-2 text-xs text-slate-700 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 outline-none resize-none"
+          className="w-full rounded-md border border-line p-2 text-xs text-ink focus:border-clay focus:ring-1 focus:ring-clay/30 outline-none resize-none"
           rows={4}
           placeholder="Add clinical observations, adjustments, or approval notes…"
           value={record.notes}
@@ -1376,7 +1376,7 @@ export function ReviewPanel() {
             className={`flex-1 rounded-md border py-2 text-sm font-medium transition-all ${
               record.approvalStatus === "rejected"
                 ? "border-red-400 bg-red-50 text-red-700"
-                : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                : "border-line text-ink-70 hover:bg-cream-200"
             }`}
           >
             Reject
@@ -1386,7 +1386,7 @@ export function ReviewPanel() {
             className={`flex-1 rounded-md border py-2 text-sm font-medium transition-all ${
               record.approvalStatus === "approved"
                 ? "border-emerald-400 bg-emerald-50 text-emerald-700"
-                : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                : "border-line text-ink-70 hover:bg-cream-200"
             }`}
           >
             Approve

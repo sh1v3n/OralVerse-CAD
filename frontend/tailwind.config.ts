@@ -5,9 +5,12 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: "#0b0f17",
-        panel: "#111827",
-        accent: "#22d3ee",
+        // Warm cream theme (matches landing page)
+        cream: { DEFAULT: "#F6F2EB", 100: "#FCFAF6", 200: "#EFE9DF", 300: "#E6DECF" },
+        surface: { DEFAULT: "#FCFAF6", raised: "#FFFFFF", sunk: "#EFE9DF" },
+        ink: { DEFAULT: "#1C1A16", 70: "#5A5448", 40: "#8C8576" },
+        clay: { DEFAULT: "#C2613D", dark: "#A94E2E", soft: "#F0E2D8" },
+        line: "#DBD3C5",
         severity: {
           green: "#22c55e",
           yellow: "#eab308",

@@ -68,7 +68,7 @@ function SceneLoading() {
   return (
     <Html center>
       <div className="flex items-center gap-2 rounded-full border border-stone-200 bg-white/95 px-4 py-2 text-[11px] font-medium text-stone-600 shadow-md whitespace-nowrap">
-        <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+        <span className="h-2 w-2 rounded-full bg-clay animate-pulse" />
         Loading scan…
       </div>
     </Html>

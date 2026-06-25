@@ -39,10 +39,10 @@ const STATUS_LABELS: Record<ImportStatus, string> = {
 };
 
 const STATUS_COLOR: Record<ImportStatus, string> = {
-  idle: "bg-slate-400",
+  idle: "bg-ink-40",
   uploading: "bg-blue-500",
   preprocessing: "bg-amber-500",
-  segmenting: "bg-violet-500",
+  segmenting: "bg-clay",
   ready: "bg-emerald-500",
   error: "bg-red-500",
 };
@@ -128,13 +128,13 @@ export function ImportPanel({ onComplete }: Props) {
           onDragLeave={() => { dragCounter.current--; }}
           onDrop={onDrop}
           onClick={() => inputRef.current?.click()}
-          className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-8 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
+          className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-line bg-cream-200 px-4 py-8 cursor-pointer hover:border-clay hover:bg-clay-soft transition-colors"
         >
-          <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-8 h-8 text-ink-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <p className="text-sm font-medium text-slate-700">Drop STL / OBJ / PLY / GLB here</p>
-          <p className="text-xs text-slate-400">or click to browse</p>
+          <p className="text-sm font-medium text-ink">Drop STL / OBJ / PLY / GLB here</p>
+          <p className="text-xs text-ink-40">or click to browse</p>
           <input
             ref={inputRef}
             type="file"
@@ -144,7 +144,7 @@ export function ImportPanel({ onComplete }: Props) {
           />
         </div>
         {status === "error" && (
-          <button onClick={resetImport} className="text-xs text-slate-500 hover:text-slate-800 underline">
+          <button onClick={resetImport} className="text-xs text-ink-40 hover:text-ink underline">
             Try again
           </button>
         )}
@@ -155,7 +155,7 @@ export function ImportPanel({ onComplete }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-slate-700 truncate max-w-[160px]">{fileName}</p>
+        <p className="text-xs font-semibold text-ink truncate max-w-[160px]">{fileName}</p>
         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold text-white ${STATUS_COLOR[status]}`}>
           {status === "ready" ? (
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -168,15 +168,15 @@ export function ImportPanel({ onComplete }: Props) {
         </span>
       </div>
 
-      <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-200">
+      <div className="relative h-2 w-full overflow-hidden rounded-full bg-cream-300">
         <div
-          className="absolute inset-y-0 left-0 rounded-full bg-indigo-500 transition-all duration-300"
+          className="absolute inset-y-0 left-0 rounded-full bg-clay transition-all duration-300"
           style={{ width: `${progress}%` }}
         />
       </div>
 
       {isActive && (
-        <p className="text-xs text-slate-500 text-center">{STATUS_LABELS[status]}</p>
+        <p className="text-xs text-ink-40 text-center">{STATUS_LABELS[status]}</p>
       )}
 
       {status === "ready" && (

@@ -7,6 +7,7 @@ import { useTreatmentStore } from "@/lib/store";
 import { useCaseStore } from "@/lib/caseStore";
 import type { WorkflowStage } from "@/lib/store";
 import { CaseListSidebar } from "@/components/panels/CaseListSidebar";
+import { PaperTexture } from "@/components/ui/PaperTexture";
 import {
   PreprocessingPanel,
   SegmentationPanel,
@@ -54,16 +55,16 @@ function StagePanel({ stage }: { stage: WorkflowStage }) {
 
 function NoPatientSelected() {
   return (
-    <div className="flex flex-1 items-center justify-center bg-[#070b11]">
+    <div className="flex flex-1 items-center justify-center">
       <div className="text-center max-w-sm px-6">
-        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 border border-white/10">
-          <svg className="h-8 w-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface border border-line">
+          <svg className="h-8 w-8 text-ink-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
               d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
         </div>
-        <h2 className="text-sm font-semibold text-slate-300 mb-1">No Patient Selected</h2>
-        <p className="text-xs text-slate-600 leading-relaxed">
+        <h2 className="text-sm font-semibold text-ink mb-1">No Patient Selected</h2>
+        <p className="text-xs text-ink-40 leading-relaxed">
           Select or create a patient from the sidebar, then link a dataset to begin the orthodontic workflow.
         </p>
       </div>
@@ -102,27 +103,34 @@ export default function Dashboard() {
   const isLast  = currentIdx === WORKFLOW_STAGES.length - 1;
 
   return (
-    <main className="flex h-screen w-full flex-col bg-[#070b11] text-slate-200 font-sans overflow-hidden">
+    <main
+      className="relative flex h-screen w-full flex-col text-ink font-sans overflow-hidden"
+      style={{
+        background:
+          "radial-gradient(120% 90% at 50% 18%, #F6F2EB 0%, #EFE9DF 46%, #E6DECF 100%)",
+      }}
+    >
+      <PaperTexture grainZIndex={1} marksZIndex={1} />
 
       {/* ── Top header ─────────────────────────────────────────────────────── */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-white/8 bg-[#0a0f1a] px-4 z-20">
+      <header className="relative z-20 flex h-12 shrink-0 items-center justify-between border-b border-line bg-cream-100/80 backdrop-blur px-4">
 
         {/* Logo + patient info */}
         <div className="flex items-center gap-3 min-w-[220px]">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-violet-600 text-white text-[10px] font-black shrink-0 shadow-sm shadow-cyan-500/20">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-ink text-cream-100 text-[10px] font-black shrink-0 shadow-sm">
             OV
           </div>
           {hasActiveCase ? (
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-100 truncate leading-tight">
+              <p className="text-sm font-semibold text-ink truncate leading-tight">
                 {patient?.name ?? "Unknown Patient"}
               </p>
-              <p className="text-[10px] text-slate-500 truncate">
+              <p className="text-[10px] text-ink-40 truncate">
                 {theCase?.datasetLabel ? `Dataset: ${theCase.datasetLabel} · ` : ""}{record?.label ?? "No Plan"}
               </p>
             </div>
           ) : (
-            <span className="text-sm font-medium text-slate-500">OralVerse CAD</span>
+            <span className="text-sm font-medium text-ink-40">OralVerse CAD</span>
           )}
         </div>
 
@@ -136,16 +144,16 @@ export default function Dashboard() {
                 key={stage.id}
                 onClick={() => setWorkflowStage(stage.id)}
                 className={`flex items-center text-xs font-medium transition-all whitespace-nowrap ${
-                  isActive  ? "text-cyan-400"
-                  : isPast  ? "text-cyan-700 hover:text-cyan-500"
-                            : "text-slate-600 hover:text-slate-400"
+                  isActive  ? "text-clay"
+                  : isPast  ? "text-clay/70 hover:text-clay"
+                            : "text-ink-40 hover:text-ink-70"
                 }`}
               >
                 <span
                   className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all ${
-                    isActive  ? "border-cyan-500 bg-cyan-500 text-slate-900"
-                    : isPast  ? "border-cyan-700 bg-cyan-700 text-slate-900"
-                              : "border-white/15 bg-white/5 text-slate-500"
+                    isActive  ? "border-clay bg-clay text-cream-100"
+                    : isPast  ? "border-clay/70 bg-clay/70 text-cream-100"
+                              : "border-line bg-surface text-ink-40"
                   }`}
                 >
                   {isPast && !isActive ? (
@@ -164,7 +172,7 @@ export default function Dashboard() {
                 </span>
                 {index < WORKFLOW_STAGES.length - 1 && (
                   <span className={`mx-1 h-px w-3 shrink-0 transition-colors ${
-                    isPast || isActive ? "bg-cyan-800" : "bg-white/10"
+                    isPast || isActive ? "bg-clay/50" : "bg-line"
                   }`} />
                 )}
               </button>
@@ -177,7 +185,7 @@ export default function Dashboard() {
           {hasActiveCase && !isFirst && (
             <button
               onClick={rejectWorkflow}
-              className="rounded-md border border-white/12 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/10 transition"
+              className="rounded-md border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink-70 hover:bg-cream-200 transition"
             >
               ← Back
             </button>
@@ -185,7 +193,7 @@ export default function Dashboard() {
           {hasActiveCase && !isLast && (
             <button
               onClick={advanceWorkflow}
-              className="rounded-md bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-cyan-400 transition"
+              className="rounded-md bg-ink px-3 py-1.5 text-xs font-semibold text-cream-100 hover:bg-ink/90 transition"
             >
               Continue →
             </button>
@@ -194,31 +202,31 @@ export default function Dashboard() {
             <>
               <button
                 onClick={() => setApprovalStatus("rejected")}
-                className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition"
+                className="rounded-md border border-red-300 bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-200 transition"
               >
                 Reject
               </button>
               <button
                 onClick={() => setApprovalStatus("approved")}
-                className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-emerald-400 transition"
+                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 transition"
               >
                 Approve
               </button>
-              <button className="rounded-md bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-cyan-400 transition">
+              <button className="rounded-md bg-ink px-3 py-1.5 text-xs font-semibold text-cream-100 hover:bg-ink/90 transition">
                 Export Plan
               </button>
             </>
           )}
 
-          <div className="ml-1 h-6 w-px bg-white/10" />
+          <div className="ml-1 h-6 w-px bg-line" />
           <UserButton
             appearance={{
               elements: {
                 avatarBox: "h-7 w-7",
-                userButtonPopoverCard: "bg-[#0d1520] border border-white/8 shadow-xl",
-                userButtonPopoverActionButton: "text-slate-300 hover:bg-white/5",
-                userButtonPopoverActionButtonText: "text-slate-300",
-                userButtonPopoverFooter: "border-t border-white/8",
+                userButtonPopoverCard: "bg-surface border border-line shadow-xl",
+                userButtonPopoverActionButton: "text-ink-70 hover:bg-cream-200",
+                userButtonPopoverActionButtonText: "text-ink-70",
+                userButtonPopoverFooter: "border-t border-line",
               },
             }}
           />
@@ -226,15 +234,15 @@ export default function Dashboard() {
       </header>
 
       {/* ── Body ───────────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="relative z-10 flex flex-1 overflow-hidden">
 
         <CaseListSidebar />
 
         {hasActiveCase ? (
           <>
             {/* Tool panel */}
-            <aside className="flex w-72 shrink-0 flex-col border-r border-white/8 bg-[#0d1520] overflow-hidden">
-              <div className="border-b border-white/5 px-4 py-2.5 bg-white/3">
+            <aside className="flex w-72 shrink-0 flex-col border-r border-line bg-surface overflow-hidden">
+              <div className="border-b border-line px-4 py-2.5 bg-cream-200">
                 <p className="eyebrow">
                   {WORKFLOW_STAGES[currentIdx]?.label} tools
                 </p>
@@ -242,11 +250,11 @@ export default function Dashboard() {
               <div className="flex-1 overflow-y-auto p-4">
                 <StagePanel stage={currentStageId} />
               </div>
-              <div className="border-t border-white/8 p-3 bg-[#0d1520]">
+              <div className="border-t border-line p-3 bg-surface">
                 <button
                   onClick={advanceWorkflow}
                   disabled={isLast}
-                  className="w-full rounded-md bg-cyan-500 py-2.5 text-sm font-semibold text-slate-900 hover:bg-cyan-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  className="w-full rounded-md bg-ink py-2.5 text-sm font-semibold text-cream-100 hover:bg-ink/90 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
                   {isLast ? "Plan complete" : `Continue to ${WORKFLOW_STAGES[currentIdx + 1]?.label}`}
                 </button>
@@ -254,8 +262,8 @@ export default function Dashboard() {
             </aside>
 
             {/* 3D Viewer */}
-            <div className="flex-1 overflow-hidden bg-[#070b11] p-3 pb-0">
-              <div className="w-full h-full rounded-t-xl overflow-hidden border border-white/8 shadow-[0_4px_40px_rgb(0,0,0,0.5)]">
+            <div className="flex-1 overflow-hidden p-3 pb-0">
+              <div className="w-full h-full rounded-t-xl overflow-hidden border border-line shadow-[0_8px_40px_rgb(28,26,22,0.10)]">
                 <TreatmentViewer />
               </div>
             </div>

@@ -67,7 +67,7 @@ export function ToothMesh({
     if (mode === "segmentation") {
       return tooth.segmentation.color;
     }
-    if (isSelected) return "#8b9dc3"; // soft indigo-blue for selected
+    if (isSelected) return "#C2613D"; // terracotta accent for selected
     return "#c8a87a"; // bone/tan default
   }, [mode, isSelected, tooth.segmentation.color]);
 
@@ -98,8 +98,8 @@ export function ToothMesh({
     // Hover / selection highlight
     if (isSelected) {
       // In segmentation mode: bright white-tinted emissive ring so it pops against the tooth color
-      // In normal mode: the color itself changes to indigo so emissive can be subtle
-      material.emissive.set(mode === "segmentation" ? "#ffffff" : "#4a5fa8");
+      // In normal mode: the color itself changes to terracotta so emissive can be subtle
+      material.emissive.set(mode === "segmentation" ? "#ffffff" : "#A94E2E");
       material.emissiveIntensity = mode === "segmentation" ? 0.35 : 0.22;
     } else if (isHovered) {
       material.emissive.set("#b08850");
@@ -255,10 +255,10 @@ export function ToothMesh({
       {mode === "segmentation" && (
         <Html position={[tooth.centroid.x, tooth.centroid.y + labelYOffset, tooth.centroid.z]} center zIndexRange={[100, 0]}>
           <div className="flex flex-col items-center pointer-events-none transform -translate-y-full pb-1">
-            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-500 text-[9px] font-bold text-white shadow-sm ring-1 ring-white/50">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-clay text-[9px] font-bold text-white shadow-sm ring-1 ring-white/50">
               {tooth.fdi}
             </div>
-            <div className="w-px h-6 bg-gradient-to-b from-indigo-400 to-transparent opacity-60" />
+            <div className="w-px h-6 bg-gradient-to-b from-clay to-transparent opacity-60" />
           </div>
         </Html>
       )}
