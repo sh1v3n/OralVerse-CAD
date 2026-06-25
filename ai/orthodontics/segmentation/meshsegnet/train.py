@@ -143,6 +143,8 @@ def main() -> None:
     parser.add_argument("--class_weights", action=argparse.BooleanOptionalAction,
                         default=True,
                         help="Weight the focal CE term by inverse-sqrt class frequency")
+    parser.add_argument("--resume", default=None, type=Path,
+                        help="Path to a *_latest.pt checkpoint to resume training from")
     args = parser.parse_args()
 
     _check_deps()
@@ -196,12 +198,29 @@ def main() -> None:
                            gamma=args.gamma, alpha=alpha).to(device)
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    best_dsc       = 0.0
-    best_val_loss  = float("inf")
-    patience_left  = args.patience
+    best_dsc      = 0.0
+    best_val_loss = float("inf")
+    patience_left = args.patience
+    start_epoch   = 1
     log: list[dict] = []
 
-    for epoch in range(1, args.epochs + 1):
+    # Resume from a previous run's latest checkpoint if provided.
+    if args.resume:
+        if not args.resume.is_file():
+            sys.exit(f"Resume checkpoint not found: {args.resume}")
+        ckpt = torch.load(args.resume, map_location=device)
+        model.load_state_dict(ckpt["state_dict"])
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        scheduler.load_state_dict(ckpt["scheduler_state_dict"])
+        start_epoch   = ckpt["epoch"] + 1
+        best_dsc      = ckpt.get("best_dsc", 0.0)
+        best_val_loss = ckpt.get("best_val_loss", float("inf"))
+        patience_left = ckpt.get("patience_left", args.patience)
+        log           = ckpt.get("log", [])
+        print(f"Resumed from epoch {ckpt['epoch']} "
+              f"(best DSC={best_dsc:.4f}, best val loss={best_val_loss:.4f})")
+
+    for epoch in range(start_epoch, args.epochs + 1):
         t0                  = time.time()
         train_loss          = train_epoch(model, train_dl, optimizer, loss_fn, device)
         val_loss, val_dsc   = eval_epoch(model, val_dl, loss_fn, device)
@@ -240,6 +259,22 @@ def main() -> None:
                 print(f"  early stop: val loss has not improved for "
                       f"{args.patience} epochs (best={best_val_loss:.4f})")
                 break
+
+        # Save latest checkpoint every epoch for resume support.
+        torch.save({
+            "epoch":                epoch,
+            "state_dict":           model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "best_dsc":             best_dsc,
+            "best_val_loss":        best_val_loss,
+            "patience_left":        patience_left,
+            "log":                  log,
+            "arch":                 args.arch,
+            "in_features":          IN_FEATURES,
+            "num_classes":          NUM_CLASSES,
+            "k":                    args.k,
+        }, args.out_dir / f"meshsegnet_{args.arch}_latest.pt")
 
     (args.out_dir / f"log_{args.arch}.json").write_text(json.dumps(log, indent=2))
     print(f"\nBest val DSC: {best_dsc:.4f}  |  best val loss: {best_val_loss:.4f}")
