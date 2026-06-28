@@ -136,10 +136,10 @@ def main() -> None:
                         help="Dropout in the EdgeConv encoder + global MLP")
     parser.add_argument("--warmup_epochs", default=5, type=int,
                         help="Linear LR warmup epochs before cosine decay")
-    parser.add_argument("--patience",  default=20, type=int,
-                        help="Early stop after N epochs without val-loss improvement")
-    parser.add_argument("--min_delta", default=1e-3, type=float,
-                        help="Minimum val-loss improvement to reset patience")
+    parser.add_argument("--patience",  default=30, type=int,
+                        help="Early stop after N epochs without DSC improvement")
+    parser.add_argument("--min_delta", default=5e-3, type=float,
+                        help="Minimum DSC improvement to reset patience")
     parser.add_argument("--class_weights", action=argparse.BooleanOptionalAction,
                         default=True,
                         help="Weight the focal CE term by inverse-sqrt class frequency")
@@ -249,15 +249,14 @@ def main() -> None:
             }, ckpt_path)
             print(f"  saved best (DSC={val_dsc:.4f}) -> {ckpt_path}")
 
-        # Early stopping on val-loss plateau (combats overfitting).
-        if val_loss < best_val_loss - args.min_delta:
-            best_val_loss = val_loss
+        # Early stopping on DSC plateau — more stable than val loss under focal loss.
+        if val_dsc > best_dsc - args.min_delta:
             patience_left = args.patience
         else:
             patience_left -= 1
             if patience_left <= 0:
-                print(f"  early stop: val loss has not improved for "
-                      f"{args.patience} epochs (best={best_val_loss:.4f})")
+                print(f"  early stop: DSC has not improved for "
+                      f"{args.patience} epochs (best DSC={best_dsc:.4f})")
                 break
 
         # Save latest checkpoint every epoch for resume support.

@@ -90,7 +90,7 @@ class MeshSegNet(nn.Module):
         in_features: int = 9,
         num_classes: int = 17,
         k: int = 6,
-        dropout: float = 0.1,
+        dropout: float = 0.2,
     ) -> None:
         super().__init__()
         self.k = k
