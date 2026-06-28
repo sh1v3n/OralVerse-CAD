@@ -36,10 +36,10 @@ class EdgeConv(nn.Module):
         # checkpoints loadable (nn.Dropout has no params and adds no keys).
         self.mlp = nn.Sequential(
             nn.Linear(in_ch * 2, out_ch, bias=False),
-            nn.BatchNorm1d(out_ch),
+            nn.LayerNorm(out_ch),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(out_ch, out_ch, bias=False),
-            nn.BatchNorm1d(out_ch),
+            nn.LayerNorm(out_ch),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Dropout(dropout),
         )
@@ -117,11 +117,11 @@ class MeshSegNet(nn.Module):
         classifier_in = local_ch + 256  # local + global
         self.classifier = nn.Sequential(
             nn.Linear(classifier_in, 256, bias=False),
-            nn.BatchNorm1d(256),
+            nn.LayerNorm(256),
             nn.LeakyReLU(0.2),
             nn.Dropout(0.4),
             nn.Linear(256, 128, bias=False),
-            nn.BatchNorm1d(128),
+            nn.LayerNorm(128),
             nn.LeakyReLU(0.2),
             nn.Dropout(0.3),
             nn.Linear(128, num_classes),
