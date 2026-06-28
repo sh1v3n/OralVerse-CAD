@@ -61,7 +61,7 @@ def train_epoch(model, loader, optimizer, loss_fn, device) -> float:
         logits = model(features, knn_idx)
         loss   = loss_fn(logits, labels)
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
         optimizer.step()
 
         total_loss += loss.item()
@@ -126,7 +126,7 @@ def main() -> None:
     parser.add_argument("--arch",      default="upper", choices=["upper", "lower"])
     parser.add_argument("--out_dir",   default=Path(__file__).parent / "checkpoints", type=Path)
     parser.add_argument("--epochs",    default=100, type=int)
-    parser.add_argument("--lr",        default=1e-3, type=float)
+    parser.add_argument("--lr",        default=3e-4, type=float)
     parser.add_argument("--k",         default=K_NEIGHBOURS, type=int)
     parser.add_argument("--max_faces", default=16_000, type=int,
                         help="Subsample meshes larger than this (memory/speed)")
@@ -134,7 +134,7 @@ def main() -> None:
                         help="Focal-loss focusing parameter (0 = plain CE)")
     parser.add_argument("--dropout",   default=0.1, type=float,
                         help="Dropout in the EdgeConv encoder + global MLP")
-    parser.add_argument("--warmup_epochs", default=5, type=int,
+    parser.add_argument("--warmup_epochs", default=10, type=int,
                         help="Linear LR warmup epochs before cosine decay")
     parser.add_argument("--patience",  default=30, type=int,
                         help="Early stop after N epochs without DSC improvement")
