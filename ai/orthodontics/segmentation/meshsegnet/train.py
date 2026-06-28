@@ -130,7 +130,7 @@ def main() -> None:
     parser.add_argument("--k",         default=K_NEIGHBOURS, type=int)
     parser.add_argument("--max_faces", default=16_000, type=int,
                         help="Subsample meshes larger than this (memory/speed)")
-    parser.add_argument("--gamma",     default=2.0, type=float,
+    parser.add_argument("--gamma",     default=0.0, type=float,
                         help="Focal-loss focusing parameter (0 = plain CE)")
     parser.add_argument("--dropout",   default=0.1, type=float,
                         help="Dropout in the EdgeConv encoder + global MLP")
