@@ -129,57 +129,63 @@ NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
 - MeshSegNet trained with max 12,000 faces (Kaggle notebook); large meshes downsampled at inference
 - `get_segmenter()` returns a cached singleton — model loads once per server process
 
-## Track C — MeshSegNet Retraining (code done; awaiting Kaggle run)
+## Track C — MeshSegNet Retraining
 
-### Status
-All 5 training improvements implemented and committed to `claude/features`. The old ~22% DSC
-checkpoints have been **deleted**. The Kaggle notebook is ready but blocked on two things:
-1. **OSF maintenance** until June 26 02:00 UTC — download the dataset after that
-2. **Kaggle GPU quota** — 6 hrs remaining on the account; run will use T4, may need resume
+### Status (as of 2026-06-29)
+Dataset is on Kaggle and preprocessing works. Four training runs completed; all showed the same
+failure pattern. Root-cause analysis performed. **Next action: implement Fix 1 (BatchNorm →
+LayerNorm) and run on Kaggle.** ~25 GPU hours remaining on the account.
 
-### What was implemented
-1. **Focal loss + class weights** — `CombinedLoss` uses focal `(1-p_t)^gamma` CE with
-   inverse-sqrt-frequency `alpha` weights (`--gamma 2.0`, `--class_weights` default on)
-2. **Encoder dropout** — `dropout=0.1` in `EdgeConv` + `MeshSegNet` global MLP; appended at
-   end of Sequential so old checkpoint keys (indices 0-5) are unchanged → backward compatible
-3. **Early stopping on val loss** — `--patience 20` / `--min_delta 1e-3`
-4. **LR warmup → cosine** — `LinearLR` 5 epochs → `CosineAnnealingLR` via `SequentialLR`
-5. **Mesh augmentation** — mirror-flip (`i↔i+8` label remap), 3-axis rotation, scale, jitter
+### Kaggle dataset
+- Dataset `teeth3ds` uploaded to Kaggle under user `shivenshetty`
+- Mounted at: `/kaggle/input/datasets/shivenshetty/teeth3ds/` (pre-extracted folders, no zips)
+- All 7 parts present; 1800 scans → 1440 train / 180 val / 180 test (seed=42, fixed)
+- Notebook: `train_kaggle.ipynb` on `claude/features` branch; clones repo via git at runtime
 
-### Resume support
-`train.py` now saves `meshsegnet_{arch}_latest.pt` after every epoch with full training state
-(model + optimizer + scheduler + best_dsc + best_val_loss + patience_left + log).
-`--resume <path>` loads it and continues from the saved epoch.
+### Root cause analysis — train/val divergence
+All 4 runs showed: train loss ↓ steadily, val loss explodes by epoch 15–25, DSC ~18–20%.
+Hyperparameter changes (LR, focal gamma, warmup, dropout, grad clip) had no effect.
 
-### Kaggle training workflow
-**Run 1** (current quota, T4 GPU):
-- GPU: **T4** (NOT P100 — P100 is sm_60, incompatible with PyTorch 2.10 which requires sm_70+)
-- Notebook reads dataset from `/kaggle/input/teeth3ds/` (Kaggle dataset, not downloaded)
-- After run: download `meshsegnet_upper_latest.pt` + `meshsegnet_lower_latest.pt` from Output tab
+**Confirmed cause: BatchNorm running-stats mismatch with batch_size=1.**
+- During training: BatchNorm uses per-mesh statistics (each mesh is its own "batch")
+- During eval: BatchNorm switches to stored running stats (population average of all meshes seen)
+- Dental meshes have very different per-mesh geometry distributions → running stats diverge
+  from individual mesh stats → model normalises differently at train vs eval time
+- This is mechanically distinct from the "effective batch size" concern (EdgeConv sees F*k≈60k
+  elements, so batch size per se is not the issue — it is the running stats accumulation)
 
-**Getting the Teeth3DS dataset onto Kaggle (one-time, manual):**
-1. After OSF maintenance ends (June 26 02:00 UTC), go to [osf.io/xctdy](https://osf.io/xctdy)
-   and log in — OSF now requires authentication for all downloads
-2. Download all 7 zip files: `data_part_1.zip` … `data_part_7.zip`
-3. Kaggle → Datasets → New Dataset → name it `teeth3ds` → upload all 7 zips → Publish
-4. In the notebook settings → Data → Add dataset → attach `teeth3ds`
-5. The notebook extracts from `/kaggle/input/teeth3ds/*.zip` automatically
+**Secondary finding: STD pooling missing from paper.**
+- Original 2020 MICCAI MeshSegNet uses cat([max-pool, std-pool]) for global context
+- Current impl uses only max-pool → halves global feature expressiveness
+- This is a secondary issue to fix AFTER the BatchNorm fix is validated
 
-**Run 2** (next quota reset, Monday):
-1. Upload `_latest.pt` files as a Kaggle dataset (e.g. `oralverse-checkpoints`)
-2. Attach it in notebook settings
-3. Set `PRIOR_CKPT_DIR = Path('/kaggle/input/oralverse-checkpoints')` in cell 2b
-4. Run — continues from where run 1 stopped
+### What was implemented (committed to claude/features)
+1. **Focal loss + class weights** — `CombinedLoss`, gamma configurable (default now 0.0 — off)
+2. **Encoder dropout** — default 0.2 in `EdgeConv` + `MeshSegNet` global MLP
+3. **Early stopping on DSC** — `--patience 30` tracking val DSC (not val loss)
+4. **LR warmup → cosine** — `LinearLR` 5 epochs → `CosineAnnealingLR`, lr default 3e-4
+5. **Grad clip** — 0.5
+6. **Mesh augmentation** — mirror-flip, 3-axis rotation, scale, jitter
+7. **Resume support** — `_latest.pt` saves full state; `--resume <path>` restarts from epoch
 
-**After training completes:**
-Download `meshsegnet_upper_best.pt` + `meshsegnet_lower_best.pt` from Output tab and place in:
-`ai/orthodontics/segmentation/meshsegnet/checkpoints/`
+### Next Kaggle run (Fix 1 — isolate BatchNorm → LayerNorm)
+Replace all `nn.BatchNorm1d` → `nn.LayerNorm` in `model.py` only. No other changes.
+LayerNorm has no running stats; train and eval forward passes are identical.
 
-### Known Issues
-- `checkpoints/` is empty — `/segment` endpoint errors until new `.pt` files are placed there
-- Wisdom teeth (FDI 18/28/38/48) scored 0% DSC on old checkpoint — focal loss + class weights
-  + mirror-flip augmentation target this in the new training run
+**After implementing Fix 1:**
+1. Run local smoke test (CPU, dummy tensors) — verify no NaN, shape errors, train/eval parity
+2. Commit + push to `claude/features`
+3. Start fresh Kaggle session → run cell 2 individually to confirm new commit pulled
+4. Run All → watch epochs 1–15: val loss should stay below 1.1 (previously spiked to 1.5+)
+5. If val loss tracks train loss by epoch 20 → fix confirmed; let run complete
+6. Download `_best.pt` files → place in `checkpoints/`
+
+**Fix 2 (STD pooling) — implement only after Fix 1 is validated on Kaggle.**
+
+### Known issues
+- `checkpoints/` is empty — `/segment` endpoint errors until `.pt` files are placed there
 - Treatment plan generation is heuristic/mock — not clinically validated
+- Wisdom teeth (classes 8, 16) scored ~0% DSC historically; class weights target this
 
 ## Demo Dataset (scan browser)
 `datasets/data/` contains 4 patient cases / 108 STL files — used by `/api/stl/cases` for the
