@@ -38,7 +38,7 @@ ai/
         segmenter.py           # MeshSegNetSegmenter (production inference)
         evaluate.py            # per-class DSC + accuracy
         export_model.py        # verify checkpoint before deploy
-        train_colab.ipynb      # one-click free training on Colab / Kaggle
+        train_kaggle.ipynb     # one-click free training on Kaggle
         download_dataset.sh    # fetch 3DTeethSeg22 from Zenodo
       factory.py               # get_segmenter("heuristic" | "meshsegnet")
   detect/                      # YOLOv8 OPG tooth detection
@@ -93,7 +93,7 @@ MeshSegNet gives significantly better tooth separation than the heuristic. Train
 **Kaggle (recommended):**
 1. Push this repo to GitHub
 2. New Kaggle Notebook → Settings → Accelerator: GPU P100
-3. Upload `ai/orthodontics/segmentation/meshsegnet/train_colab.ipynb`
+3. Upload `ai/orthodontics/segmentation/meshsegnet/train_kaggle.ipynb`
 4. Set `REPO_URL` to your GitHub URL, run all
 5. Download `meshsegnet_upper_best.pt` + `meshsegnet_lower_best.pt` from Output tab (~5 hrs)
 

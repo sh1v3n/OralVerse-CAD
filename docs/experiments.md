@@ -58,10 +58,10 @@ layers in the EdgeConv blocks and the per-face classifier.
 
 ## Run 5 — Fix 1: BatchNorm → LayerNorm
 
-**Status**: Ready to launch  
-**Date (prepared)**: 2026-06-29  
+**Status**: Completed — **SUCCESS**  
+**Date**: 2026-06-29 (prepared) / 2026-06-30 (results)  
 **Branch**: `claude/features`  
-**Commit**: (next commit after `ea4965f`)
+**Commit**: `35676b5`
 
 ### Hypothesis
 
@@ -150,3 +150,111 @@ The definitive "fix confirmed" signal: **val_loss stays below 1.1 by epoch 15**
 - [x] Buffer elements (running stats): **0**
 - [x] `git diff HEAD`: exactly 4 lines changed, only `model.py`
 - [x] `train.py`, `dataset.py`, `preprocess.py`, `evaluate.py`, `infer.py`, `train_kaggle.ipynb`: unchanged
+
+### Results (test split, 180 scans)
+
+| Metric | Upper | Lower |
+|---|---|---|
+| Best epoch | 98 | 74 |
+| Val DSC (best) | 56.5% | 63.8% |
+| **Mean tooth DSC** | **52.9%** | **61.2%** |
+| Gingiva DSC | 86.3% | 87.4% |
+| Overall accuracy | 71.1% | 76.8% |
+
+**Per-tooth DSC — Upper:**
+
+| FDI | DSC | FDI | DSC |
+|---|---|---|---|
+| 11 | 45.1% | 21 | 49.9% |
+| 12 | 36.7% | 22 | 39.1% |
+| 13 | 54.5% | 23 | 56.5% |
+| 14 | 68.4% | 24 | 64.7% |
+| 15 | 67.9% | 25 | 65.2% |
+| 16 | 71.2% | 26 | 72.1% |
+| 17 | 65.3% | 27 | 65.3% |
+| 18 | **8.7%** | 28 | **16.1%** |
+
+**Per-tooth DSC — Lower:**
+
+| FDI | DSC | FDI | DSC |
+|---|---|---|---|
+| 41 | 55.9% | 31 | 58.0% |
+| 42 | 56.6% | 32 | 58.0% |
+| 43 | 69.0% | 33 | 69.3% |
+| 44 | 74.8% | 34 | 73.1% |
+| 45 | 72.9% | 35 | 71.4% |
+| 46 | 75.4% | 36 | 77.4% |
+| 47 | 71.1% | 37 | 72.4% |
+| 48 | **12.4%** | 38 | **10.9%** |
+
+### Key observations
+
+- Val loss tracked train loss throughout all 100 epochs — divergence **completely eliminated**
+- Molars (FDI 16/26/36/46): strongest at 71–77% — large, abundant, distinctive
+- Lateral incisors (FDI 12/22): weakest regular teeth at 37–40% — small, symmetric, easily confused
+- Wisdom teeth (FDI 18/28/38/48): 9–16% — absent in many training scans; class weighting helps but cannot compensate for scarcity
+
+### Conclusion
+
+**Hypothesis confirmed.** BatchNorm running-stats mismatch was the primary cause of train/val divergence. Replacing all `BatchNorm1d` with `LayerNorm` tripled mean tooth DSC from ~18–20% to 52–61%. This is the **validated baseline architecture**. Future experiments must branch from this.
+
+Checkpoints: `meshsegnet_upper_best.pt` (epoch 98) + `meshsegnet_lower_best.pt` (epoch 74)
+
+---
+
+## Run 6 — Fix 2: STD pooling
+
+**Status**: Ready to launch  
+**Date (prepared)**: 2026-06-30  
+**Branch**: `claude/features`  
+**Baseline**: Run 5 (`35676b5`)
+
+### Hypothesis
+
+The original 2020 MICCAI MeshSegNet paper uses `cat([max-pool, std-pool])` over all faces to produce the global context vector, feeding a `(896,)` vector into the global MLP. The current implementation uses only `max-pool`, producing a `(448,)` vector — this halves the expressiveness of the global representation.
+
+Max pooling captures the strongest feature activation anywhere on the mesh ("peak signal"). STD pooling captures the spread/variance of features across all faces ("how heterogeneous is this mesh"). Together they give the model both the extremes and the dispersion of global geometry — relevant for distinguishing wisdom teeth (high local variance, absent in many scans) from central incisors (low variance, bilaterally symmetric).
+
+### Independent variable
+
+**`model.py` only**. Two targeted edits:
+
+1. `global_mlp` Linear input: `local_ch` (448) → `local_ch * 2` (896)
+2. `forward()` global context block: add `std(dim=0, unbiased=False)` and concatenate with max
+
+Everything downstream of `global_mlp` is unaffected — its output remains `(1, 256)`, `combined` remains `(F, 704)`, and the classifier is unchanged.
+
+### Configuration (identical to Run 5)
+
+| Setting | Value |
+|---|---|
+| `lr` | 3e-4 |
+| `gamma` | 0.0 |
+| `dropout` | 0.2 |
+| `warmup_epochs` | 5 |
+| `patience` | 30 |
+| `max_faces` | 12 000 |
+| `epochs` | 100 |
+| `class_weights` | True |
+| Random seed | 42 |
+
+### Parameter count
+
+| Component | Before | After |
+|---|---|---|
+| `global_mlp` Linear | 448 × 256 = 114,688 | 896 × 256 = 229,376 |
+| Everything else | 387,345 | 387,345 |
+| **Total** | **502,033** | **616,721** |
+
+### Outcome definitions
+
+| Outcome | Definition |
+|---|---|
+| **Success** | Mean tooth DSC improves ≥ 3pp on either arch vs. Run 5 |
+| **Neutral** | DSC within ±2pp — STD pooling has no measurable effect at this scale |
+| **Failure** | DSC drops — implementation error or interaction with LayerNorm; investigate before Run 7 |
+
+### Metrics to monitor
+
+Primary: mean tooth DSC (upper + lower), val loss trend epochs 1–20  
+Secondary: per-class DSC for lateral incisors (FDI 12/22/32/42) and wisdom teeth (FDI 18/28/38/48)

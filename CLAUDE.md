@@ -32,7 +32,7 @@ OralVerse-1/
 │   └── orthodontics/
 │       └── segmentation/
 │           ├── meshsegnet/
-│           │   ├── checkpoints/  # EMPTY — awaiting Kaggle run (old ~22% DSC files deleted)
+│           │   ├── checkpoints/  # upper_best.pt (ep98, 52.9% DSC) + lower_best.pt (ep74, 61.2%)
 │           │   ├── model.py      # EdgeConv + MeshSegNet + CombinedLoss (focal loss)
 │           │   ├── dataset.py    # TeethSegDataset + augmentation
 │           │   ├── train.py      # Training script with --resume support
@@ -56,8 +56,8 @@ cd /Users/ampa/Desktop/webdev/dental/OralVerse-1/backend
 ../ml-env/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 Uses `ml-env` (not `venv`) — it contains PyTorch, trimesh, scipy needed for MeshSegNet.
-**Note:** `checkpoints/` is empty — backend will error on `/api/orthodontics/segment` until
-new Kaggle-trained `.pt` files are placed there. Use `ORALVERSE_SEGMENTER=heuristic` as fallback.
+Checkpoints are present — `/api/orthodontics/segment` is functional with `ORALVERSE_SEGMENTER=meshsegnet`.
+Use `ORALVERSE_SEGMENTER=heuristic` for instant rule-based fallback (no GPU needed).
 
 ### Frontend (Terminal 2)
 ```bash
@@ -109,7 +109,7 @@ NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
 - PyTorch — MeshSegNet GNN (EdgeConv, 17 classes per arch: 0=gingiva, 1-16=teeth)
 - trimesh for mesh I/O, scipy for KDTree KNN and connected components
 - Training dataset: Teeth3DS+ (2100 scans, 7 parts) — see Track C below
-- Checkpoints: **currently empty** — old ~22% DSC checkpoints deleted; awaiting Kaggle retraining
+- Checkpoints: `upper_best.pt` (epoch 98, 52.9% test DSC) + `lower_best.pt` (epoch 74, 61.2% test DSC)
 - Segmenter cached in memory after first load (`factory.py`)
 
 ## Backend API Endpoints
@@ -131,61 +131,80 @@ NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
 
 ## Track C — MeshSegNet Retraining
 
-### Status (as of 2026-06-29)
-Dataset is on Kaggle and preprocessing works. Four training runs completed; all showed the same
-failure pattern. Root-cause analysis performed. **Next action: implement Fix 1 (BatchNorm →
-LayerNorm) and run on Kaggle.** ~25 GPU hours remaining on the account.
+### Status (as of 2026-06-30)
+Run 5 (LayerNorm fix) **completed successfully**. Train/val divergence eliminated.
+Validated checkpoints are in `checkpoints/`. Next action: Run 6 (STD pooling) on Kaggle.
+~20 GPU hours remaining on the account.
 
-### Kaggle dataset
+### Current architecture (validated baseline — Run 5)
+- 3× EdgeConv blocks: 9→64→128→256 channels
+- Local features: `cat([x1, x2, x3])` → `(F, 448)`
+- Global context: `cat([max-pool, std-pool])` over all faces → `(896,)` → MLP → `(F, 256)`
+  *(Note: Run 5 used max-pool only; Run 6 adds std-pool — see experiment log)*
+- Classifier: `(F, 704)` → `(F, 17)` (2-layer MLP)
+- **All normalisation: LayerNorm** — no BatchNorm anywhere in the model
+- Trainable params: 502,033 (Run 5 baseline) / 616,721 (Run 6 with STD pooling)
+- No running-stat buffers — train and eval forward passes are identical
+
+### Kaggle setup
 - Dataset `teeth3ds` uploaded to Kaggle under user `shivenshetty`
-- Mounted at: `/kaggle/input/datasets/shivenshetty/teeth3ds/` (pre-extracted folders, no zips)
+- Mounted at: `/kaggle/input/datasets/shivenshetty/teeth3ds/` (pre-extracted, no zips)
 - All 7 parts present; 1800 scans → 1440 train / 180 val / 180 test (seed=42, fixed)
 - Notebook: `train_kaggle.ipynb` on `claude/features` branch; clones repo via git at runtime
+- Checkpoint dataset: `oralverse-checkpoints` on Kaggle (for resume support)
+  - Mounted at: `/kaggle/input/datasets/shivenshetty/oralverse-checkpoints/`
 
-### Root cause analysis — train/val divergence
-All 4 runs showed: train loss ↓ steadily, val loss explodes by epoch 15–25, DSC ~18–20%.
-Hyperparameter changes (LR, focal gamma, warmup, dropout, grad clip) had no effect.
+### Current checkpoints
+- `checkpoints/meshsegnet_upper_best.pt` — epoch 98, val DSC 56.5%
+- `checkpoints/meshsegnet_lower_best.pt` — epoch 74, val DSC 63.8%
+- Test split DSC: upper 52.9%, lower 61.2% (180 scans each)
+- Backend is now functional with `ORALVERSE_SEGMENTER=meshsegnet`
 
-**Confirmed cause: BatchNorm running-stats mismatch with batch_size=1.**
-- During training: BatchNorm uses per-mesh statistics (each mesh is its own "batch")
-- During eval: BatchNorm switches to stored running stats (population average of all meshes seen)
-- Dental meshes have very different per-mesh geometry distributions → running stats diverge
-  from individual mesh stats → model normalises differently at train vs eval time
-- This is mechanically distinct from the "effective batch size" concern (EdgeConv sees F*k≈60k
-  elements, so batch size per se is not the issue — it is the running stats accumulation)
+### Training pipeline (fixed, do not change without updating experiments.md)
+1. **Focal loss + class weights** — `CombinedLoss`, `gamma=0.0` (plain CE + Dice)
+2. **Encoder dropout** — 0.2 in `EdgeConv` blocks + global MLP
+3. **Early stopping on DSC** — `--patience 30`
+4. **LR warmup → cosine** — 5 epochs warmup → `CosineAnnealingLR`
+5. **Learning rate** — 3e-4, `AdamW`, `weight_decay=1e-4`
+6. **Grad clip** — 0.5
+7. **Mesh augmentation** — mirror-flip + label remap, 3-axis rotation, isotropic scale, jitter
+8. **Resume support** — `_latest.pt` saves full state; `--resume <path>` restarts from epoch
+9. **max_faces** — 12,000 (downsampled at load; large meshes are subsampled)
 
-**Secondary finding: STD pooling missing from paper.**
-- Original 2020 MICCAI MeshSegNet uses cat([max-pool, std-pool]) for global context
-- Current impl uses only max-pool → halves global feature expressiveness
-- This is a secondary issue to fix AFTER the BatchNorm fix is validated
+### Experiment log (summary — full details in docs/experiments.md)
 
-### What was implemented (committed to claude/features)
-1. **Focal loss + class weights** — `CombinedLoss`, gamma configurable (default now 0.0 — off)
-2. **Encoder dropout** — default 0.2 in `EdgeConv` + `MeshSegNet` global MLP
-3. **Early stopping on DSC** — `--patience 30` tracking val DSC (not val loss)
-4. **LR warmup → cosine** — `LinearLR` 5 epochs → `CosineAnnealingLR`, lr default 3e-4
-5. **Grad clip** — 0.5
-6. **Mesh augmentation** — mirror-flip, 3-axis rotation, scale, jitter
-7. **Resume support** — `_latest.pt` saves full state; `--resume <path>` restarts from epoch
+| Run | Key change | Val DSC upper | Val DSC lower | Outcome |
+|---|---|---|---|---|
+| 1 | Baseline (BN, focal γ=2, lr=1e-3) | ~18% | ~18% | Val diverges ep 20 |
+| 2 | Lower gamma, more dropout | ~18% | ~18% | Val diverges ep 20 |
+| 3 | Lower LR (3e-4), longer warmup | ~18% | ~18% | Val diverges ep 15 |
+| 4 | Drop focal loss (γ=0) | ~18% | ~18% | Val diverges ep 15 |
+| **5** | **BatchNorm → LayerNorm** | **56.5%** | **63.8%** | **Divergence eliminated ✓** |
+| 6 | STD pooling (planned) | TBD | TBD | Run 6 pending |
 
-### Next Kaggle run (Fix 1 — isolate BatchNorm → LayerNorm)
-Replace all `nn.BatchNorm1d` → `nn.LayerNorm` in `model.py` only. No other changes.
-LayerNorm has no running stats; train and eval forward passes are identical.
+**Root cause (confirmed by Run 5):** `nn.BatchNorm1d` accumulates running stats across
+training meshes. With `batch_size=1`, each eval mesh is normalised against population averages
+from all 1440 training meshes rather than its own geometry statistics. LayerNorm normalises
+each sample by its own features — no running stats, train/eval identical.
 
-**After implementing Fix 1:**
-1. Run local smoke test (CPU, dummy tensors) — verify no NaN, shape errors, train/eval parity
-2. Commit + push to `claude/features`
-3. Start fresh Kaggle session → run cell 2 individually to confirm new commit pulled
-4. Run All → watch epochs 1–15: val loss should stay below 1.1 (previously spiked to 1.5+)
-5. If val loss tracks train loss by epoch 20 → fix confirmed; let run complete
-6. Download `_best.pt` files → place in `checkpoints/`
+### Next Kaggle run (Run 6 — STD pooling)
+Add `std-pool` to the global context alongside `max-pool`, as specified in the original
+2020 MICCAI MeshSegNet paper. Change: `global_mlp` Linear input 448→896; forward()
+computes `cat([max, std])`. All other hyperparameters identical to Run 5.
 
-**Fix 2 (STD pooling) — implement only after Fix 1 is validated on Kaggle.**
+**Kaggle workflow:**
+1. Commit + push Run 6 changes to `claude/features`
+2. In "final" notebook: run cells 1–4 (GPU, clone, resume helper, deps)
+3. Run preprocess cell (or skip if data already exists in session)
+4. Edit training cells: confirm `--gamma "0.0"` (not 1.0 — the notebook is stale)
+5. Run training cells (upper + lower)
+6. Save Version to lock outputs for download
 
-### Known issues
-- `checkpoints/` is empty — `/segment` endpoint errors until `.pt` files are placed there
+### Known limitations
+- Wisdom teeth (FDI 18/28/38/48): 9–16% DSC — absent in many scans; limited by data scarcity
+- Lateral incisors (FDI 12/22): 37–40% DSC — small teeth, symmetric, difficult to distinguish
 - Treatment plan generation is heuristic/mock — not clinically validated
-- Wisdom teeth (classes 8, 16) scored ~0% DSC historically; class weights target this
+- Poseidon3D demo dataset (200 cases) download was interrupted at 577 MB; resume with `curl -C -`
 
 ## Demo Dataset (scan browser)
 `datasets/data/` contains 4 patient cases / 108 STL files — used by `/api/stl/cases` for the

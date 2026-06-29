@@ -97,7 +97,7 @@ Input: (F, 9) per-face features
 EdgeConv(9→64) → EdgeConv(64→128) → EdgeConv(128→256)
   ↓
 Local features: cat([x1, x2, x3])  →  (F, 448)
-Global context: max-pool → MLP    →  (F, 256)
+Global context: cat(max-pool, std-pool) → MLP  →  (F, 256)
 Classifier: (F, 704) → (F, 17)
 ```
 

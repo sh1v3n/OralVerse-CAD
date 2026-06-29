@@ -103,11 +103,11 @@ class MeshSegNet(nn.Module):
         # Combine multi-scale local features
         local_ch = 64 + 128 + 256  # 448
 
-        # Global context MLP (applied after global max-pool).
-        # LayerNorm instead of BatchNorm because this receives a single vector
-        # (1, 256) — one global feature per mesh — so batch stats are undefined.
+        # Global context MLP (applied after global max-pool + std-pool concatenation).
+        # Input is cat([max, std]) over all faces → (local_ch * 2,) = (896,).
+        # LayerNorm: no running stats, train/eval identical (same reason as EdgeConv).
         self.global_mlp = nn.Sequential(
-            nn.Linear(local_ch, 256, bias=False),
+            nn.Linear(local_ch * 2, 256, bias=False),
             nn.LayerNorm(256),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Dropout(dropout),
@@ -138,10 +138,12 @@ class MeshSegNet(nn.Module):
 
         local_feat = torch.cat([x1, x2, x3], dim=-1)   # (F, 448)
 
-        # Global context: max-pool → broadcast
-        global_feat = local_feat.max(dim=0)[0]           # (448,)
-        global_feat = self.global_mlp(global_feat.unsqueeze(0))  # (1, 256)
-        global_feat = global_feat.expand(features.shape[0], -1)  # (F, 256)
+        # Global context: cat(max-pool, std-pool) → broadcast (paper-faithful)
+        global_max = local_feat.max(dim=0)[0]                        # (448,)
+        global_std = local_feat.std(dim=0, unbiased=False)            # (448,)
+        global_feat = torch.cat([global_max, global_std], dim=-1)     # (896,)
+        global_feat = self.global_mlp(global_feat.unsqueeze(0))       # (1, 256)
+        global_feat = global_feat.expand(features.shape[0], -1)       # (F, 256)
 
         combined = torch.cat([local_feat, global_feat], dim=-1)  # (F, 704)
         return self.classifier(combined)                           # (F, num_classes)
