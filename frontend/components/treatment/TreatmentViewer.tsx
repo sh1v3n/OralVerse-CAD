@@ -42,7 +42,7 @@ function ScanNotLoadedOverlay() {
 const CAMERA_POSITIONS: Record<CameraView, [number, number, number]> = {
   both:       [0,  5.0,  9.0],
   labial:     [0,  1.5,  10.0],
-  lingual:    [0,  1.5, -10.0],
+  lingual:    [0,  1.5, -3.0], // Positioned inside the arch looking outward
   maxillary:  [0, 12.0,  0.5],
   mandibular: [0,-12.0,  0.5],
   right:      [-10, 2.0, 2.0],
@@ -68,7 +68,7 @@ function SceneLoading() {
   return (
     <Html center>
       <div className="flex items-center gap-2 rounded-full border border-stone-200 bg-white/95 px-4 py-2 text-[11px] font-medium text-stone-600 shadow-md whitespace-nowrap">
-        <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+        <span className="h-2 w-2 rounded-full bg-clay animate-pulse" />
         Loading scan…
       </div>
     </Html>

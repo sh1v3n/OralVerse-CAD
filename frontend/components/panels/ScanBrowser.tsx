@@ -36,7 +36,7 @@ export function ScanBrowser() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-ink-40">
           Scan Dataset
         </p>
         {activeCaseId && (
@@ -53,16 +53,16 @@ export function ScanBrowser() {
       {isLoading && (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
-            <span className="text-xs text-slate-600">
+            <span className="h-2 w-2 rounded-full bg-clay animate-pulse" />
+            <span className="text-xs text-ink-70">
               {loadingStatus === "fetching_manifest"
                 ? "Loading dataset…"
                 : `Loading scan… ${loadingProgress}%`}
             </span>
           </div>
-          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-cream-300">
             <div
-              className="absolute inset-y-0 left-0 rounded-full bg-indigo-500 transition-all duration-300"
+              className="absolute inset-y-0 left-0 rounded-full bg-clay transition-all duration-300"
               style={{ width: `${loadingProgress}%` }}
             />
           </div>
@@ -99,7 +99,7 @@ export function ScanBrowser() {
         ))}
 
         {cases.length === 0 && loadingStatus === "idle" && (
-          <p className="text-xs text-slate-400 text-center py-4 italic">
+          <p className="text-xs text-ink-40 text-center py-4 italic">
             No dataset found. Place STL files in <code className="text-[10px]">datasets/data/</code>
           </p>
         )}
@@ -129,28 +129,28 @@ function CaseCard({
       disabled={isLoading}
       className={`w-full rounded-lg border p-2.5 text-left transition-all ${
         isActive
-          ? "border-indigo-300 bg-indigo-50 ring-1 ring-indigo-200"
-          : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/30"
+          ? "border-clay/40 bg-clay-soft ring-1 ring-clay/30"
+          : "border-line bg-surface-raised hover:border-clay/30 hover:bg-clay-soft/30"
       } ${isLoading ? "opacity-60 cursor-wait" : ""}`}
     >
       <div className="flex items-start justify-between">
         <div className="min-w-0">
-          <p className={`text-sm font-semibold truncate ${isActive ? "text-indigo-900" : "text-slate-800"}`}>
+          <p className={`text-sm font-semibold truncate ${isActive ? "text-clay-dark" : "text-ink"}`}>
             {caseData.label}
           </p>
-          <p className="text-[10px] text-slate-500 mt-0.5">
+          <p className="text-[10px] text-ink-40 mt-0.5">
             {caseData.scan_count} scans · {(totalSize / 1024 / 1024).toFixed(0)} MB
           </p>
         </div>
         {isActive && !isLoading && (
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 shrink-0">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-clay shrink-0">
             <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
             </svg>
           </span>
         )}
         {isLoading && (
-          <span className="h-5 w-5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin shrink-0" />
+          <span className="h-5 w-5 rounded-full border-2 border-clay border-t-transparent animate-spin shrink-0" />
         )}
       </div>
 
@@ -167,7 +167,7 @@ function CaseCard({
           </span>
         )}
         {caseData.scan_count - upperCount - lowerCount > 0 && (
-          <span className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
+          <span className="inline-flex items-center rounded-md bg-cream-200 px-1.5 py-0.5 text-[9px] font-bold text-ink-40">
             +{caseData.scan_count - upperCount - lowerCount} more
           </span>
         )}

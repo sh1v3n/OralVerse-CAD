@@ -27,13 +27,22 @@ export function emptyTransform(): ToothTransform {
   };
 }
 
+// ─── Verification State ───────────────────────────────────────────────────────
+
+export type VerificationState =
+  | "auto"       // from heuristic or ML, unreviewed
+  | "reviewed"   // clinician reviewed and accepted
+  | "corrected"  // clinician made edits (FDI change, merge)
+  | "verified";  // explicitly verified (confidence locked to 1.0)
+
 // ─── Segmentation Metadata ────────────────────────────────────────────────────
 
 export interface SegmentationMeta {
-  confidence: number;           // 0–1 (1 = manually verified)
+  confidence: number;                 // 0–1 (1 = manually verified)
   source: "heuristic" | "manual" | "ml";
-  color: string;                // hex color for segmentation overlay
-  triangleCount: number;        // how many triangles in this tooth
+  color: string;                      // hex color for segmentation overlay
+  triangleCount: number;              // how many triangles in this tooth
+  verificationState: VerificationState;
 }
 
 // ─── Tooth Object ─────────────────────────────────────────────────────────────
@@ -106,11 +115,23 @@ interface ToothObjectState {
   // Actions — Display
   setShowSegmentationColors: (show: boolean) => void;
 
+  // Actions — Manual Correction
+  reassignFdi: (oldFdi: number, newFdi: number) => void;
+  mergeTeeth: (fdi1: number, fdi2: number) => void;
+  splitTooth: (fdi: number, axis: "x" | "y" | "z", newFdi: number) => void;
+  setVerificationState: (fdi: number, state: VerificationState) => void;
+  verifyTooth: (fdi: number) => void;
+
+  // Undo (single level — covers last merge/split/reassign)
+  previousTeeth: ToothObject[] | null;
+  undo: () => void;
+
   // Selectors
   getToothByFdi: (fdi: number) => ToothObject | undefined;
   getSelectedTeeth: () => ToothObject[];
   getUpperTeeth: () => ToothObject[];
   getLowerTeeth: () => ToothObject[];
+  getVerificationSummary: () => { total: number; verified: number; corrected: number; auto: number };
 }
 
 export const useToothObjectStore = create<ToothObjectState>((set, get) => ({
@@ -119,7 +140,8 @@ export const useToothObjectStore = create<ToothObjectState>((set, get) => ({
   gingivaLower: null,
   selectedFdis: new Set<number>(),
   hoveredFdi: null,
-  showSegmentationColors: false,
+  showSegmentationColors: true,
+  previousTeeth: null,
 
   // ── Population ───────────────────────────────────────────────────────────
 
@@ -214,6 +236,200 @@ export const useToothObjectStore = create<ToothObjectState>((set, get) => ({
 
   setShowSegmentationColors: (show) => set({ showSegmentationColors: show }),
 
+  // ── Manual Correction ─────────────────────────────────────────────────────
+
+  undo: () =>
+    set((s) => s.previousTeeth ? { teeth: s.previousTeeth, previousTeeth: null } : s),
+
+  reassignFdi: (oldFdi, newFdi) =>
+    set((s) => ({
+      previousTeeth: s.teeth,
+      teeth: s.teeth.map((t) =>
+        t.fdi === oldFdi
+          ? {
+              ...t,
+              fdi: newFdi,
+              id: `tooth-${newFdi}`,
+              arch: (newFdi >= 11 && newFdi <= 28 ? "upper" : "lower") as "upper" | "lower",
+              kind: toothKind(newFdi),
+              segmentation: {
+                ...t.segmentation,
+                confidence: Math.min(t.segmentation.confidence, 0.7),
+                verificationState: "corrected" as VerificationState,
+              },
+            }
+          : t,
+      ),
+      selectedFdis: (() => {
+        const next = new Set(s.selectedFdis);
+        if (next.has(oldFdi)) { next.delete(oldFdi); next.add(newFdi); }
+        return next;
+      })(),
+    })),
+
+  splitTooth: (fdi, axis, newFdi) =>
+    set((s) => {
+      const tooth = s.teeth.find((t) => t.fdi === fdi);
+      if (!tooth) return s;
+
+      const pos = tooth.geometry.getAttribute("position").array as Float32Array;
+      const faceCount = pos.length / 9;
+      const axisIdx = axis === "x" ? 0 : axis === "y" ? 1 : 2;
+
+      const bb = tooth.boundingBox;
+      const minVal = axis === "x" ? bb.min.x : axis === "y" ? bb.min.y : bb.min.z;
+      const maxVal = axis === "x" ? bb.max.x : axis === "y" ? bb.max.y : bb.max.z;
+      const planeVal = (minVal + maxVal) / 2;
+
+      const groupA: number[] = [];
+      const groupB: number[] = [];
+      for (let fi = 0; fi < faceCount; fi++) {
+        const b = fi * 9;
+        const v = (pos[b + axisIdx] + pos[b + 3 + axisIdx] + pos[b + 6 + axisIdx]) / 3;
+        (v >= planeVal ? groupA : groupB).push(fi);
+      }
+      if (groupA.length === 0 || groupB.length === 0) return s;
+
+      const buildGeom = (faceIndices: number[]) => {
+        const arr = new Float32Array(faceIndices.length * 9);
+        faceIndices.forEach((fi, i) => arr.set(pos.subarray(fi * 9, fi * 9 + 9), i * 9));
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+        g.computeVertexNormals();
+        g.computeBoundingBox();
+        return g;
+      };
+
+      const centroidOf = (g: THREE.BufferGeometry) => {
+        const p = g.getAttribute("position") as THREE.BufferAttribute;
+        const c = new THREE.Vector3();
+        for (let i = 0; i < p.count; i += 3) {
+          c.x += (p.getX(i) + p.getX(i + 1) + p.getX(i + 2)) / 3;
+          c.y += (p.getY(i) + p.getY(i + 1) + p.getY(i + 2)) / 3;
+          c.z += (p.getZ(i) + p.getZ(i + 1) + p.getZ(i + 2)) / 3;
+        }
+        return c.divideScalar(p.count / 3);
+      };
+
+      const geomA = buildGeom(groupA);
+      const geomB = buildGeom(groupB);
+      const newColorIdx = s.teeth.length;
+
+      const toothA: ToothObject = {
+        ...tooth,
+        geometry: geomA,
+        centroid: centroidOf(geomA),
+        boundingBox: geomA.boundingBox!.clone(),
+        segmentation: {
+          ...tooth.segmentation,
+          triangleCount: groupA.length,
+          confidence: Math.min(tooth.segmentation.confidence, 0.7),
+          verificationState: "corrected",
+        },
+      };
+      const toothB: ToothObject = {
+        ...tooth,
+        fdi: newFdi,
+        id: `tooth-${newFdi}`,
+        arch: (newFdi >= 11 && newFdi <= 28 ? "upper" : "lower") as "upper" | "lower",
+        kind: toothKind(newFdi),
+        geometry: geomB,
+        centroid: centroidOf(geomB),
+        boundingBox: geomB.boundingBox!.clone(),
+        segmentation: {
+          ...tooth.segmentation,
+          color: getSegmentationColor(newColorIdx),
+          triangleCount: groupB.length,
+          confidence: Math.min(tooth.segmentation.confidence, 0.7),
+          verificationState: "corrected",
+        },
+      };
+
+      const nextSelected = new Set(s.selectedFdis);
+      nextSelected.add(newFdi);
+      return {
+        previousTeeth: s.teeth,
+        teeth: s.teeth.filter((t) => t.fdi !== fdi).concat(toothA, toothB),
+        selectedFdis: nextSelected,
+      };
+    }),
+
+  mergeTeeth: (fdi1, fdi2) =>
+    set((s) => {
+      const t1 = s.teeth.find((t) => t.fdi === fdi1);
+      const t2 = s.teeth.find((t) => t.fdi === fdi2);
+      if (!t1 || !t2) return s;
+
+      // Merge geometries
+      const merged = new THREE.BufferGeometry();
+      const p1 = t1.geometry.getAttribute("position") as THREE.BufferAttribute;
+      const p2 = t2.geometry.getAttribute("position") as THREE.BufferAttribute;
+      const combined = new Float32Array(p1.array.length + p2.array.length);
+      combined.set(p1.array, 0);
+      combined.set(p2.array as Float32Array, p1.array.length);
+      merged.setAttribute("position", new THREE.BufferAttribute(combined, 3));
+      merged.computeVertexNormals();
+      merged.computeBoundingBox();
+
+      const totalTris = t1.segmentation.triangleCount + t2.segmentation.triangleCount;
+      const mergedCentroid = new THREE.Vector3()
+        .addScaledVector(t1.centroid, t1.segmentation.triangleCount / totalTris)
+        .addScaledVector(t2.centroid, t2.segmentation.triangleCount / totalTris);
+
+      const mergedTooth: ToothObject = {
+        ...t1,
+        geometry: merged,
+        centroid: mergedCentroid,
+        boundingBox: merged.boundingBox!.clone(),
+        segmentation: {
+          ...t1.segmentation,
+          triangleCount: totalTris,
+          confidence: Math.min(t1.segmentation.confidence, t2.segmentation.confidence, 0.7),
+          verificationState: "corrected",
+        },
+      };
+
+      const next = new Set(s.selectedFdis);
+      next.delete(fdi2);
+      return {
+        previousTeeth: s.teeth,
+        teeth: s.teeth.filter((t) => t.fdi !== fdi1 && t.fdi !== fdi2).concat(mergedTooth),
+        selectedFdis: next,
+      };
+    }),
+
+  setVerificationState: (fdi, state) =>
+    set((s) => ({
+      teeth: s.teeth.map((t) =>
+        t.fdi === fdi
+          ? {
+              ...t,
+              segmentation: {
+                ...t.segmentation,
+                verificationState: state,
+                confidence: state === "verified" ? 1.0 : t.segmentation.confidence,
+              },
+            }
+          : t,
+      ),
+    })),
+
+  verifyTooth: (fdi) =>
+    set((s) => ({
+      teeth: s.teeth.map((t) =>
+        t.fdi === fdi
+          ? {
+              ...t,
+              segmentation: {
+                ...t.segmentation,
+                verificationState: "verified",
+                confidence: 1.0,
+              },
+            }
+          : t,
+      ),
+    })),
+
   // ── Selectors ────────────────────────────────────────────────────────────
 
   getToothByFdi: (fdi) => get().teeth.find((t) => t.fdi === fdi),
@@ -223,4 +439,13 @@ export const useToothObjectStore = create<ToothObjectState>((set, get) => ({
   },
   getUpperTeeth: () => get().teeth.filter((t) => t.arch === "upper"),
   getLowerTeeth: () => get().teeth.filter((t) => t.arch === "lower"),
+  getVerificationSummary: () => {
+    const teeth = get().teeth;
+    return {
+      total: teeth.length,
+      verified: teeth.filter((t) => t.segmentation.verificationState === "verified" || t.segmentation.verificationState === "reviewed").length,
+      corrected: teeth.filter((t) => t.segmentation.verificationState === "corrected").length,
+      auto: teeth.filter((t) => t.segmentation.verificationState === "auto").length,
+    };
+  },
 }));

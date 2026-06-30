@@ -4,34 +4,34 @@
 
 html, body, #__next { height: 100%; }
 body {
-  background: #070b11;
-  color: #e5e7eb;
+  background: #F6F2EB;
+  color: #1C1A16;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #27384b transparent;
+  scrollbar-color: #C9C0B2 transparent;
 }
 
 .ortho-panel {
-  border: 1px solid rgb(255 255 255 / 0.08);
+  border: 1px solid #DBD3C5;
   border-radius: 20px;
-  background: #0d1520;
+  background: #FCFAF6;
   padding: 16px;
-  box-shadow: 0 18px 60px rgb(0 0 0 / 0.16);
+  box-shadow: 0 18px 60px rgb(28 26 22 / 0.08);
 }
 
 .panel-skeleton {
-  border: 1px solid rgb(255 255 255 / 0.08);
+  border: 1px solid #DBD3C5;
   border-radius: 20px;
-  background: linear-gradient(110deg, #0d1520 30%, #152131 45%, #0d1520 60%);
+  background: linear-gradient(110deg, #EFE9DF 30%, #FCFAF6 45%, #EFE9DF 60%);
   background-size: 220% 100%;
   animation: shimmer 1.4s linear infinite;
 }
 
 .eyebrow {
-  color: #64748b;
+  color: #8C8576;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -39,10 +39,10 @@ body {
 }
 
 .status-pill {
-  border: 1px solid rgb(34 211 238 / 0.18);
+  border: 1px solid rgb(194 97 61 / 0.25);
   border-radius: 999px;
-  background: rgb(34 211 238 / 0.08);
-  color: #67e8f9;
+  background: rgb(194 97 61 / 0.10);
+  color: #A94E2E;
   padding: 4px 8px;
   font-size: 9px;
   font-weight: 700;
@@ -50,28 +50,41 @@ body {
   text-transform: uppercase;
 }
 
-.severity-mild { color: #86efac; }
-.severity-moderate { color: #fbbf24; }
-.severity-high { color: #fb7185; }
+.severity-mild { color: #15803d; }
+.severity-moderate { color: #b45309; }
+.severity-high { color: #be123c; }
 
 .stage-range {
   height: 4px;
   appearance: none;
   border-radius: 999px;
-  background: linear-gradient(90deg, #22d3ee, #8b5cf6);
+  background: linear-gradient(90deg, #C2613D, #1C1A16);
 }
 
 .stage-range::-webkit-slider-thumb {
   width: 16px;
   height: 16px;
   appearance: none;
-  border: 3px solid #071019;
+  border: 3px solid #FCFAF6;
   border-radius: 50%;
-  background: #e2faff;
-  box-shadow: 0 0 0 1px #22d3ee;
+  background: #1C1A16;
+  box-shadow: 0 0 0 1px #C2613D;
   cursor: pointer;
 }
 
 @keyframes shimmer {
   to { background-position-x: -220%; }
+}
+
+@keyframes arc-float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-14px); }
+}
+@keyframes arc-glow {
+  0%, 100% { transform: scale(1);    opacity: 0.85; }
+  50%      { transform: scale(1.06); opacity: 0.68; }
+}
+@keyframes arc-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

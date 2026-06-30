@@ -143,7 +143,7 @@ export function STLViewerControls() {
             <button
               onClick={() => setWireframe(!wireframe)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                wireframe ? "bg-violet-600 text-white" : "bg-stone-100 text-stone-500 hover:bg-stone-200"
+                wireframe ? "bg-clay text-white" : "bg-stone-100 text-stone-500 hover:bg-stone-200"
               }`}
             >
               Wire

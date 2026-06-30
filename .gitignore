@@ -1,68 +1,169 @@
-# Datasets (large image folders — keep out of git)
+# ==========================================================
+# OralVerse-CAD .gitignore
+# ==========================================================
+
+# ==========================================================
+# Datasets & Raw Dental Data
+# ==========================================================
+
+datasets/
 data/
 archive/
 archive2/
 
-# Local backend dev artifacts
+# Raw scan formats
+*.stl
+*.ply
+*.obj
+
+# Large archives
+*.zip
+*.7z
+*.rar
+*.tar
+*.gz
+
+# User uploads
+uploads/
+
+# ==========================================================
+# Machine Learning Artifacts
+# ==========================================================
+
+runs/
+checkpoints/
+weights/
+models/
+
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.h5
+*.pkl
+*.joblib
+
+wandb/
+mlruns/
+lightning_logs/
+tensorboard/
+
+# ==========================================================
+# Python
+# ==========================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+*.so
+*.egg
+*.egg-info/
+.eggs/
+
+build/
+dist/
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.tox/
+.nox/
+
+.venv/
+venv/
+env/
+ENV/
+ml-env/
+
+.python-version
+
+# ==========================================================
+# Databases & Storage
+# ==========================================================
+
 storage/
+
 *.db
 *.sqlite
 *.sqlite3
 
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-env/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+# ==========================================================
+# Node.js / Next.js
+# ==========================================================
 
-# ML artifacts
-runs/
-*.pt
-*.onnx
-*.pth
-wandb/
-lightning_logs/
-mlruns/
-
-# Node / Next.js
 node_modules/
+
 .next/
 out/
 dist/
 build/
 .turbo/
 
-# Env / secrets
+coverage/
+
+*.tsbuildinfo
+
+# ==========================================================
+# Environment Variables & Secrets
+# ==========================================================
+
 .env
 .env.*
 !.env.example
 
-# OS / editor
-.DS_Store
-Thumbs.db
+# API keys and credentials
+secrets/
+credentials/
+
+# ==========================================================
+# Claude Code / AI Tooling
+# ==========================================================
+
+.claude/
+
+# ==========================================================
+# IDE & Editor Files
+# ==========================================================
+
 .vscode/
 .idea/
 
-# Claude Code local state
-.claude/
-# Dental datasets
-datasets/
-archive.zip
-*.stl
-*.ply
-*.obj
-*.glb
+*.swp
+*.swo
 
-# FastAPI uploads
-uploads/
+# ==========================================================
+# Operating System Files
+# ==========================================================
 
+.DS_Store
+.AppleDouble
+.LSOverride
+
+Thumbs.db
+Desktop.ini
+
+# ==========================================================
 # Logs
+# ==========================================================
+
 logs/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-*.tsbuildinfo
+# ==========================================================
+# IMPORTANT: DO NOT IGNORE
+# ==========================================================
+#
+# Keep these tracked because they are application assets:
+#
+# - Teeth Model/*.glb
+# - frontend/public/**
+# - assets/teeth/**
+#
+# The GLB tooth models are required for the application.
+#
+# ==========================================================

@@ -1,0 +1,29 @@
+# MeshSegNet — default hyperparameters
+# CLI flags on any script override these values.
+
+model:
+  in_features: 9        # centroid(3) + normal(3) + log_area(1) + kappa1(1) + kappa2(1)
+  num_classes: 17       # 0=gingiva, 1-16=teeth (same for upper and lower)
+  k_neighbours: 6       # k-NN graph order for EdgeConv
+  dropout: 0.1          # dropout in the EdgeConv encoder + global MLP
+
+training:
+  epochs: 100
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  max_faces: 16000      # subsample meshes larger than this (memory / speed)
+  ce_weight: 0.5        # focal-CE fraction of combined focal-CE + Dice loss
+  gamma: 2.0            # focal-loss focusing parameter (0 = plain CE)
+  class_weights: true   # weight focal CE by inverse-sqrt class frequency (rare teeth)
+  warmup_epochs: 5      # linear LR warmup before cosine decay
+  patience: 20          # early stop after N epochs without val-loss improvement
+  min_delta: 1.0e-3     # minimum val-loss improvement to reset patience
+  num_workers: 4        # DataLoader workers (reduce to 0 on Windows)
+  # Mesh augmentation (rotation / mid-sagittal mirror-flip + label remap /
+  # scale / jitter) is always on for the train split — see dataset.py _augment.
+
+data:
+  train_frac: 0.80
+  val_frac: 0.10
+  # test_frac is implicitly 1 - train_frac - val_frac = 0.10
+  seed: 42

@@ -418,6 +418,7 @@ function assignFdiLabels(
         source: "heuristic",
         color: getSegmentationColor(ci),
         triangleCount: cluster.length,
+        verificationState: "auto" as const,
       },
     });
   }

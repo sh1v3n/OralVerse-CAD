@@ -1,0 +1,21 @@
+# MeshSegNet — per-tooth segmentation
+# Install: pip install -r requirements.txt
+#
+# GPU note: install PyTorch for your CUDA version first:
+#   https://pytorch.org/get-started/locally/
+# Then run this file.  CPU-only training also works (slow).
+
+# 3D mesh loading and feature extraction
+trimesh>=4.4.0
+
+# Deep learning
+torch>=2.1.0
+
+# Numerics
+numpy>=1.26.0
+
+# Progress bars
+tqdm>=4.65.0
+
+# YAML config reading
+pyyaml>=6.0

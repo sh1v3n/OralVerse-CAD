@@ -246,3 +246,74 @@ export async function askOrthodonticCopilot(
   if (!res.ok) throw new Error(`copilot failed: ${res.status}`);
   return res.json();
 }
+
+// ─── Staged Treatment Plan ────────────────────────────────────────────────────
+
+export interface StagedToothTransform {
+  position: [number, number, number];
+  rotation: [number, number, number];
+}
+
+export interface StagedToothInput {
+  id: string;
+  initial: StagedToothTransform;
+  target: StagedToothTransform;
+}
+
+export interface ToothStage {
+  stage: number;
+  transform: StagedToothTransform;
+}
+
+export interface StagedToothPlan {
+  initial: StagedToothTransform;
+  target: StagedToothTransform;
+  stages: ToothStage[];
+}
+
+export interface StagedTreatmentPlan {
+  totalStages: number;
+  constraints: Record<string, number>;
+  teeth: Record<string, StagedToothPlan>;
+}
+
+export async function generateStagedPlan(
+  teeth: StagedToothInput[],
+): Promise<StagedTreatmentPlan> {
+  const res = await fetch(`${API_URL}/api/orthodontics/staged-plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teeth }),
+  });
+  if (!res.ok) throw new Error(`staged plan failed: ${res.status}`);
+  return res.json();
+}
+
+// ─── Segmentation ─────────────────────────────────────────────────────────────
+
+export interface SegmentationResponse {
+  segments: Array<{
+    fdi: number;
+    face_mask: number[];              // face indices belonging to this tooth
+    confidence: number;               // 0–1
+    centroid: [number, number, number];
+  }>;
+  gingiva_faces: number[];            // face indices of gingiva
+  model: string;
+  duration_ms: number;
+}
+
+export async function segmentArchMesh(
+  vertices: number[][],
+  faces: number[][],
+  arch: "upper" | "lower",
+): Promise<SegmentationResponse> {
+  const res = await fetch(`${API_URL}/api/orthodontics/segment`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ vertices, faces, arch }),
+  });
+  if (!res.ok) throw new Error(`segmentation failed: ${res.status}`);
+  return res.json();
+}
+
