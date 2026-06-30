@@ -1,22 +1,24 @@
 """MeshSegNet — graph-based tooth segmentation model.
 
-Architecture (simplified from the 2020 MICCAI paper):
+Production architecture (Run 5 validated baseline, 502,033 params):
 
   Input: (F, C_in) per-face features
     ↓
-  GraphConvBlock × 3  — local neighbourhood aggregation via k-NN
+  EdgeConv × 3  — local neighbourhood aggregation via k-NN (9→64→128→256)
     ↓
-  Global context      — max-pool over all faces → (C_g,) broadcast back to (F, C_g)
+  Local features: cat([x1, x2, x3])  →  (F, 448)
+  Global context: max-pool over all faces → (448,) → MLP → broadcast (F, 256)
     ↓
-  Classifier MLP      — (F, C_local + C_g) → (F, num_classes)
+  Classifier MLP  — (F, 704) → (F, num_classes)
 
-Each GraphConvBlock:
+Each EdgeConv block:
   For face i with neighbours j ∈ N(i):
     edge_feat[i,j] = MLP([x_i, x_j - x_i])   — local difference encoding
     x_i'          = max_{j} edge_feat[i,j]    — neighbourhood aggregation
 
-This captures local surface curvature and topology without requiring an
-explicit graph library — all operations are dense matrix multiplications.
+All normalisation uses LayerNorm — no BatchNorm, no running-stat buffers.
+Train and eval forward passes are identical. See docs/research/segmentation_findings.md
+for full experiment history and architectural rationale.
 """
 
 from __future__ import annotations
@@ -103,11 +105,11 @@ class MeshSegNet(nn.Module):
         # Combine multi-scale local features
         local_ch = 64 + 128 + 256  # 448
 
-        # Global context MLP (applied after global max-pool + std-pool concatenation).
-        # Input is cat([max, std]) over all faces → (local_ch * 2,) = (896,).
+        # Global context MLP: applied after global max-pool over all faces.
+        # Input: max-pool of local_feat → (local_ch,) = (448,).
         # LayerNorm: no running stats, train/eval identical (same reason as EdgeConv).
         self.global_mlp = nn.Sequential(
-            nn.Linear(local_ch * 2, 256, bias=False),
+            nn.Linear(local_ch, 256, bias=False),
             nn.LayerNorm(256),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Dropout(dropout),
@@ -138,12 +140,10 @@ class MeshSegNet(nn.Module):
 
         local_feat = torch.cat([x1, x2, x3], dim=-1)   # (F, 448)
 
-        # Global context: cat(max-pool, std-pool) → broadcast (paper-faithful)
-        global_max = local_feat.max(dim=0)[0]                        # (448,)
-        global_std = local_feat.std(dim=0, unbiased=False)            # (448,)
-        global_feat = torch.cat([global_max, global_std], dim=-1)     # (896,)
-        global_feat = self.global_mlp(global_feat.unsqueeze(0))       # (1, 256)
-        global_feat = global_feat.expand(features.shape[0], -1)       # (F, 256)
+        # Global context: max-pool over all faces → broadcast
+        global_feat = local_feat.max(dim=0)[0]                    # (448,)
+        global_feat = self.global_mlp(global_feat.unsqueeze(0))   # (1, 256)
+        global_feat = global_feat.expand(features.shape[0], -1)   # (F, 256)
 
         combined = torch.cat([local_feat, global_feat], dim=-1)  # (F, 704)
         return self.classifier(combined)                           # (F, num_classes)

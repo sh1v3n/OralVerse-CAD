@@ -32,7 +32,7 @@ OralVerse-1/
 │   └── orthodontics/
 │       └── segmentation/
 │           ├── meshsegnet/
-│           │   ├── checkpoints/  # upper_best.pt (ep98, 52.9% DSC) + lower_best.pt (ep74, 61.2%)
+│           │   ├── checkpoints/  # upper_best.pt (Run 5, ep98, 52.9% test DSC) + lower_best.pt (ep74, 61.2%)
 │           │   ├── model.py      # EdgeConv + MeshSegNet + CombinedLoss (focal loss)
 │           │   ├── dataset.py    # TeethSegDataset + augmentation
 │           │   ├── train.py      # Training script with --resume support
@@ -129,79 +129,65 @@ NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
 - MeshSegNet trained with max 12,000 faces (Kaggle notebook); large meshes downsampled at inference
 - `get_segmenter()` returns a cached singleton — model loads once per server process
 
-## Track C — MeshSegNet Retraining
+## Track C — MeshSegNet (Segmentation)
 
-### Status (as of 2026-06-30)
-Run 6 (STD pooling) **completed**. Upper arch regressed −23pp (33.5% vs 56.5%); lower neutral (+0.4pp).
-**Production baseline remains Run 5 checkpoints.** Run 7 options: train longer, lower LR, or revert STD pooling.
-~8 GPU hours remaining on the account (Run 6 consumed ~12 hrs).
+### Status (as of 2026-06-30) — STABLE
 
-### Current architecture (validated baseline — Run 5)
+Segmentation module is **frozen** at the Run 5 validated baseline. No pending architectural changes.
+
+Future segmentation improvements are independent research experiments; start from Run 5.  
+Full experiment history and analyses: [`docs/research/segmentation_findings.md`](docs/research/segmentation_findings.md)  
+Concise run log: [`docs/experiments.md`](docs/experiments.md)
+
+### Production architecture — Run 5
+
 - 3× EdgeConv blocks: 9→64→128→256 channels
 - Local features: `cat([x1, x2, x3])` → `(F, 448)`
-- Global context: `cat([max-pool, std-pool])` over all faces → `(896,)` → MLP → `(F, 256)`
-  *(Note: Run 5 used max-pool only; Run 6 adds std-pool — see experiment log)*
+- Global context: `local_feat.max(dim=0)` → `(448,)` → Linear(448→256) + LayerNorm → `(F, 256)`
 - Classifier: `(F, 704)` → `(F, 17)` (2-layer MLP)
-- **All normalisation: LayerNorm** — no BatchNorm anywhere in the model
-- Trainable params: 502,033 (Run 5 baseline) / 616,721 (Run 6 with STD pooling)
-- No running-stat buffers — train and eval forward passes are identical
+- **All normalisation: LayerNorm** — no BatchNorm, no running-stat buffers
+- **Trainable params: 502,033**
+- Train and eval forward passes are identical
 
-### Kaggle setup
-- Dataset `teeth3ds` uploaded to Kaggle under user `shivenshetty`
-- Mounted at: `/kaggle/input/datasets/shivenshetty/teeth3ds/` (pre-extracted, no zips)
-- All 7 parts present; 1800 scans → 1440 train / 180 val / 180 test (seed=42, fixed)
-- Notebook: `train_kaggle.ipynb` on `claude/features` branch; clones repo via git at runtime
-- Checkpoint dataset: `oralverse-checkpoints` on Kaggle (for resume support)
-  - Mounted at: `/kaggle/input/datasets/shivenshetty/oralverse-checkpoints/`
+### Production checkpoints
 
-### Current checkpoints
-- `checkpoints/meshsegnet_upper_best.pt` — epoch 98, val DSC 56.5%
-- `checkpoints/meshsegnet_lower_best.pt` — epoch 74, val DSC 63.8%
-- Test split DSC: upper 52.9%, lower 61.2% (180 scans each)
-- Backend is now functional with `ORALVERSE_SEGMENTER=meshsegnet`
+- `checkpoints/meshsegnet_upper_best.pt` — epoch 98, val DSC 56.5%, test DSC 52.9%
+- `checkpoints/meshsegnet_lower_best.pt` — epoch 74, val DSC 63.8%, test DSC 61.2%
+- Backend functional with `ORALVERSE_SEGMENTER=meshsegnet`
 
-### Training pipeline (fixed, do not change without updating experiments.md)
-1. **Focal loss + class weights** — `CombinedLoss`, `gamma=0.0` (plain CE + Dice)
-2. **Encoder dropout** — 0.2 in `EdgeConv` blocks + global MLP
-3. **Early stopping on DSC** — `--patience 30`
-4. **LR warmup → cosine** — 5 epochs warmup → `CosineAnnealingLR`
-5. **Learning rate** — 3e-4, `AdamW`, `weight_decay=1e-4`
-6. **Grad clip** — 0.5
-7. **Mesh augmentation** — mirror-flip + label remap, 3-axis rotation, isotropic scale, jitter
-8. **Resume support** — `_latest.pt` saves full state; `--resume <path>` restarts from epoch
-9. **max_faces** — 12,000 (downsampled at load; large meshes are subsampled)
+### Experiment summary
 
-### Experiment log (summary — full details in docs/experiments.md)
-
-| Run | Key change | Val DSC upper | Val DSC lower | Outcome |
+| Run | Key change | Upper val DSC | Lower val DSC | Outcome |
 |---|---|---|---|---|
-| 1 | Baseline (BN, focal γ=2, lr=1e-3) | ~18% | ~18% | Val diverges ep 20 |
-| 2 | Lower gamma, more dropout | ~18% | ~18% | Val diverges ep 20 |
-| 3 | Lower LR (3e-4), longer warmup | ~18% | ~18% | Val diverges ep 15 |
-| 4 | Drop focal loss (γ=0) | ~18% | ~18% | Val diverges ep 15 |
-| **5** | **BatchNorm → LayerNorm** | **56.5%** | **63.8%** | **Divergence eliminated ✓** |
-| 6 | STD pooling | 33.5% | 64.2% | Upper regressed −23pp; lower neutral |
+| 1–4 | Hyperparameter search (BatchNorm) | ~18% | ~18% | Train/val divergence — BatchNorm bug |
+| **5** | **BatchNorm → LayerNorm** | **56.5%** | **63.8%** | **Divergence eliminated ✓ PRODUCTION** |
+| 6 | STD pooling (research experiment) | 33.5% | 64.2% | Upper −23pp. Not adopted. Archived. |
 
-**Root cause (confirmed by Run 5):** `nn.BatchNorm1d` accumulates running stats across
-training meshes. With `batch_size=1`, each eval mesh is normalised against population averages
-from all 1440 training meshes rather than its own geometry statistics. LayerNorm normalises
-each sample by its own features — no running stats, train/eval identical.
+### Kaggle setup (for future research runs)
 
-**Run 6 post-mortem:** Upper arch failed to converge (DSC 33.5%, val_loss stuck at ~0.64). Lower arch was neutral (+0.4pp). The upper failure is an optimization problem, not a fundamental architecture flaw — the larger `global_mlp` (114k new params) requires more training steps to converge, and upper arch is harder. STD pooling is not ruled out; Run 7 should either train longer or reduce LR to help upper arch converge. Production baseline remains Run 5.
+- Dataset `teeth3ds`: `shivenshetty/teeth3ds`, mounted at `/kaggle/input/datasets/shivenshetty/teeth3ds/`
+- 1800 scans → 1440 train / 180 val / 180 test (seed=42, fixed)
+- Notebook: `train_kaggle.ipynb` on `claude/features`; clones repo via git
+- Checkpoints dataset: `shivenshetty/oralverse-checkpoints`
+- **Always confirm `--gamma "0.0"` in notebook cells** — the notebook has a stale default of `"1.0"`
 
-**Kaggle workflow (for future runs):**
-1. Commit + push changes to `claude/features`
-2. In "final" notebook: run cells 1–4 (GPU, clone, resume helper, deps)
-3. Run preprocess cell (or skip if data already exists in session)
-4. Edit training cells: confirm `--gamma "0.0"` (not 1.0 — the notebook is stale)
-5. Run training cells (upper + lower)
-6. Save Version to lock outputs for download
+### Training pipeline (do not change without updating docs/experiments.md)
+
+1. `CombinedLoss`, `gamma=0.0` (plain CE + Dice), class weights (inverse-sqrt frequency)
+2. Encoder dropout 0.2 in EdgeConv blocks + global MLP
+3. Early stopping on DSC, `patience=30`
+4. LR warmup 5 epochs → `CosineAnnealingLR`; lr=3e-4, AdamW, `weight_decay=1e-4`
+5. Grad clip 0.5
+6. Augmentation: mirror-flip + label remap, 3-axis rotation, isotropic scale, jitter
+7. Resume: `_latest.pt` saves full state; `--resume <path>` restarts from epoch
+8. `max_faces=12,000`
 
 ### Known limitations
-- Wisdom teeth (FDI 18/28/38/48): 9–16% DSC — absent in many scans; limited by data scarcity
-- Lateral incisors (FDI 12/22): 37–40% DSC — small teeth, symmetric, difficult to distinguish
+
+- Wisdom teeth (FDI 18/28/38/48): 9–16% DSC — absent in many scans; data scarcity ceiling
+- Lateral incisors (FDI 12/22): 37–40% DSC — small, symmetric, difficult to disambiguate
 - Treatment plan generation is heuristic/mock — not clinically validated
-- Poseidon3D demo dataset (200 cases) download was interrupted at 577 MB; resume with `curl -C -`
+- Poseidon3D demo dataset (200 cases) download interrupted at 577 MB; resume with `curl -C -`
 
 ## Demo Dataset (scan browser)
 `datasets/data/` contains 4 patient cases / 108 STL files — used by `/api/stl/cases` for the
