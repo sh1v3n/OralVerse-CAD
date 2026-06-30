@@ -258,3 +258,47 @@ Everything downstream of `global_mlp` is unaffected — its output remains `(1, 
 
 Primary: mean tooth DSC (upper + lower), val loss trend epochs 1–20  
 Secondary: per-class DSC for lateral incisors (FDI 12/22/32/42) and wisdom teeth (FDI 18/28/38/48)
+
+### Results
+
+**Status**: Completed — **FAILURE (upper) / NEUTRAL (lower)**  
+**Date (completed)**: 2026-06-30
+
+| Metric | Upper | Lower |
+|---|---|---|
+| Best epoch | 98 | 85 |
+| Val DSC (best) | **33.5%** (was 56.5%) | **64.2%** (was 63.8%) |
+| Δ vs Run 5 | **−23pp** | +0.4pp |
+| Val loss (final) | ~0.64 | ~0.41 |
+
+**Full training curve — upper arch:**
+
+- Epochs 1–100: DSC climbs slowly from 3% to 33.5%, never has a phase transition
+- Val loss stays pinned at ~0.64 throughout (never drops below 0.63)
+- No convergence event at any point in 100 epochs
+
+**Full training curve — lower arch:**
+
+- Phase transition at epoch 22: DSC jumps 0.29 → 0.44, loss drops from 0.69 → 0.60
+- Continues improving to peak 64.2% at epoch 85
+- Normal convergence pattern, consistent with Run 5
+
+### Diagnosis
+
+Upper arch experienced an **optimization failure** — the model never found a good loss basin in 100 epochs. Two contributing factors:
+
+1. **Larger parameter count** (616k vs 502k): the `global_mlp` Linear grew from 114k to 229k params. A larger first-layer weight matrix needs favorable initialization to converge in 100 epochs. Upper arch meshes are harder (palate symmetry, smaller anterior teeth) so the model is more sensitive to initialization.
+2. **Stochastic variance**: same fixed seed but different weight matrix shape → different starting point in a higher-dimensional landscape.
+
+STD pooling itself is not disproven as an architecture improvement. The lower arch result (neutral, not worse) suggests the *idea* is sound. The upper failure is likely a training stability issue at this model scale, not a fundamental architecture problem.
+
+### Conclusion
+
+**Outcome: Failure/Neutral.** STD pooling did not improve either arch, and caused a catastrophic regression on upper. 
+
+**Run 5 checkpoints remain the production baseline.** Run 6 lower checkpoint (64.2%) is marginally better but switching is not justified when upper is 23pp worse.
+
+**Next steps (Run 7 candidates):**
+- Option A: Revert to Run 5 architecture (no STD pooling) and train longer (150 epochs, resume from Run 5)
+- Option B: Keep STD pooling but add LR warmup extension or lower LR (2e-4) to help upper arch converge
+- Option C: Abandon STD pooling, focus on data augmentation (heavier arch-axis augmentation to help upper arch symmetry confusion)

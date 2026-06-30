@@ -132,9 +132,9 @@ NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
 ## Track C — MeshSegNet Retraining
 
 ### Status (as of 2026-06-30)
-Run 5 (LayerNorm fix) **completed successfully**. Train/val divergence eliminated.
-Validated checkpoints are in `checkpoints/`. Next action: Run 6 (STD pooling) on Kaggle.
-~20 GPU hours remaining on the account.
+Run 6 (STD pooling) **completed**. Upper arch regressed −23pp (33.5% vs 56.5%); lower neutral (+0.4pp).
+**Production baseline remains Run 5 checkpoints.** Run 7 options: train longer, lower LR, or revert STD pooling.
+~8 GPU hours remaining on the account (Run 6 consumed ~12 hrs).
 
 ### Current architecture (validated baseline — Run 5)
 - 3× EdgeConv blocks: 9→64→128→256 channels
@@ -180,20 +180,17 @@ Validated checkpoints are in `checkpoints/`. Next action: Run 6 (STD pooling) on
 | 3 | Lower LR (3e-4), longer warmup | ~18% | ~18% | Val diverges ep 15 |
 | 4 | Drop focal loss (γ=0) | ~18% | ~18% | Val diverges ep 15 |
 | **5** | **BatchNorm → LayerNorm** | **56.5%** | **63.8%** | **Divergence eliminated ✓** |
-| 6 | STD pooling (planned) | TBD | TBD | Run 6 pending |
+| 6 | STD pooling | 33.5% | 64.2% | Upper regressed −23pp; lower neutral |
 
 **Root cause (confirmed by Run 5):** `nn.BatchNorm1d` accumulates running stats across
 training meshes. With `batch_size=1`, each eval mesh is normalised against population averages
 from all 1440 training meshes rather than its own geometry statistics. LayerNorm normalises
 each sample by its own features — no running stats, train/eval identical.
 
-### Next Kaggle run (Run 6 — STD pooling)
-Add `std-pool` to the global context alongside `max-pool`, as specified in the original
-2020 MICCAI MeshSegNet paper. Change: `global_mlp` Linear input 448→896; forward()
-computes `cat([max, std])`. All other hyperparameters identical to Run 5.
+**Run 6 post-mortem:** Upper arch failed to converge (DSC 33.5%, val_loss stuck at ~0.64). Lower arch was neutral (+0.4pp). The upper failure is an optimization problem, not a fundamental architecture flaw — the larger `global_mlp` (114k new params) requires more training steps to converge, and upper arch is harder. STD pooling is not ruled out; Run 7 should either train longer or reduce LR to help upper arch converge. Production baseline remains Run 5.
 
-**Kaggle workflow:**
-1. Commit + push Run 6 changes to `claude/features`
+**Kaggle workflow (for future runs):**
+1. Commit + push changes to `claude/features`
 2. In "final" notebook: run cells 1–4 (GPU, clone, resume helper, deps)
 3. Run preprocess cell (or skip if data already exists in session)
 4. Edit training cells: confirm `--gamma "0.0"` (not 1.0 — the notebook is stale)
